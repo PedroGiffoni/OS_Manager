@@ -1,0 +1,16 @@
+fastapi==0.143.2
+uvicorn==0.54.0
+SQLAlchemy==2.1.4
+alembic==1.20.0
+pydantic==2.14.1
+argon2-cffi==25.1.0
+httpx==0.28.1
+pytest==9.1.1
+openpyxl==3.1.5
+reportlab==5.0.1
+python-multipart==0.0.32
+starlette==1.8.0
+tzdata==2026.5
+pypdf==6.20.1
+ruff==0.17.1
+pip-audit==2.10.1

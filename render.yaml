@@ -1,0 +1,26 @@
+# Backend de TESTES; o plano free não preserva SQLite em reinícios.
+# Não contém disco pago, cartão, credenciais ou dados locais.
+services:
+  - type: web
+    name: os-manager-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./data/os_manager.db
+      - key: CLOUD_DEPLOYMENT
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: APP_TIMEZONE
+        value: America/Sao_Paulo
+      - key: TRUSTED_ORIGINS
+        sync: false
+      - key: OS_MANAGER_ALLOW_DEMO_SEED
+        value: "false"
+      - key: OS_MANAGER_DEMO_PASSWORD
+        sync: false

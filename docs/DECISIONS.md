@@ -1,0 +1,19 @@
+# Decisões e premissas
+
+1. Pasta original é a instalação do Pen, sem fonte de aplicação na raiz. Criado projeto isolado `os-manager`; nenhum arquivo instalado foi substituído.
+2. Stack solicitada adotada com CSS local em lugar de Tailwind e controles HTML nativos acessíveis. Sem integração externa, GitLab, Power BI, IA ou aplicativo móvel.
+3. SQLite em arquivo exclusivamente nesta fase. Valores em centavos/minutos inteiros; nenhuma tarifa/custo usa REAL. JSON guarda configuração/valores com validação de tipos no servidor. IDs inteiros e timestamps ISO 8601 UTC são portáveis mediante avaliação do banco destino.
+4. Tarifa positiva para fornecedor ativo. Cadastro inicial de fornecedor/tarifa é atômico. Quem pode cadastrar mas não alterar tarifa pode criar cadastro inativo. Contas e fornecedores são separados; vínculo de login é definido na criação e mantido imutável nesta V1 para evitar transferência silenciosa de acesso.
+5. Troca de fornecedor exige backlog/A fazer e ausência de qualquer versão de apontamento. Alocação anterior permanece; nunca se reutiliza sua tarifa para outro fornecedor. Em andamento, devolução/troca requer desenho de fluxo adicional e não é liberada implicitamente.
+6. Matriz conservadora: apenas transição sequencial para frente. Retornos comuns são recusados; única exceção é Concluído → Em revisão, por gestor e com motivo. Rejeição de horas mantém Em revisão. Não é possível pular etapas.
+7. Reabertura retira a aprovação da projeção consolidada atual, preserva decisão/custo anterior na auditoria, avança a versão e exige nova submissão do fornecedor antes de nova aprovação. Não há lançamento financeiro aditivo: o consolidado é uma projeção da aprovação elegível atual.
+8. Encerrar sprint congela indicadores no vínculo histórico, remove vínculos ativos, conserva concluídas na sprint e devolve pendentes ao backlog com status visual Backlog. O estado anterior fica no vínculo e na auditoria. Horas, campos, anexos e alocação não são apagados. Reabrir sprint não recolhe pendências já devolvidas ou replanejadas; reativa somente os vínculos ainda pertencentes à sprint. Novo encerramento conserva retratos anteriores no snapshot.
+9. Exclusão operacional é arquivamento auditado. Tarefa só pode ser arquivada antes de execução/apontamentos/sprint, e sprint somente planejada e sem vínculos. Não há purge na interface.
+10. Filtros de período usam criação da atividade em UTC, explicitamente rotulada nos relatórios. Não representam regime contábil de caixa/competência. Essa política deve ser homologada antes de uso financeiro institucional.
+11. Anexos de tipos restritos são baixados como arquivos e não executados dentro da aplicação. Até 5 MiB por arquivo, persistidos no próprio SQLite para simplificar backup local. Comentários e schemas mantêm histórico, sem remoção silenciosa.
+12. Banco corporativo, metas institucionais, política definitiva de correções e implantação multiusuário dependem da TI/homologação. Não há promessa de migração automática.
+13. O construtor inclui campos adicionais e referências nativas ordenáveis. A lista nativa é fechada e exclui tarifa/custo. Horas nativas usam o endpoint estrutural e a autorização exclusiva do fornecedor; removê-las do layout não remove minutos/aprovações nem desabilita a apresentação de preenchimento necessária ao fluxo. A biblioteca aceita arraste ou inclusão por botão, e a ordem aceita arraste ou Subir/Descer.
+
+## Publicação gratuita para testes (15/10/2026)
+
+Preparado backend Render Free com SQLite efêmero, sem mudar SGBD nem criar recursos pagos. A ativação depende de aceitar reinicialização dos dados; a decisão continua pendente. Frontend Vercel utiliza proxy /api no mesmo domínio para preservar cookies Strict e CSRF. Origem HTTPS exata, Secure e senha privada de seed são obrigatórios no entrypoint de nuvem. Seed no startup é opt-in explícito para testes; nunca altera banco já inicializado.
