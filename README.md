@@ -131,4 +131,4 @@ docker-compose.yml
 Consulte também `docs/ARCHITECTURE.md`, `docs/PERMISSIONS.md`, `docs/METRICS.md`, `docs/DATABASE_MIGRATION.md`, `docs/DECISIONS.md` e `docs/KNOWN_LIMITATIONS.md`.
 ## Publicação para testes
 
-Configuração Vercel + backend Render Free, pré-requisitos de autenticação, cookies e limitações do SQLite efêmero: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). A publicação remota ainda depende das contas e da escolha de persistência; não há URL publicada confirmada.
+Configuração Vercel + backend Render Free, pré-requisitos de autenticação, cookies e limitações do SQLite efêmero: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Código enviado a [PedroGiffoni/OS_Manager](https://github.com/PedroGiffoni/OS_Manager); projeto Vercel criado e configurado para `frontend`. O deploy funcional depende do backend e da escolha de persistência; não há URL publicada confirmada. Estado atual: [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md).

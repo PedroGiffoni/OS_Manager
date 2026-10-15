@@ -25,6 +25,8 @@ SQLite permanece temporário para desenvolvimento e testes. Não houve homologa�
 - [x] Seed de teste privado opcional e idempotente; banco local excluído do envio.
 - [x] Documentar deploy e executar backend/build/E2E locais (VALIDATION.md).
 - [ ] Definir com o usuário se o SQLite pode ser descartado em reinícios.
-- [ ] Autenticar contas e disponibilizar repositório privado.
+- [x] Autenticar Vercel CLI e enviar código ao repositório público informado pelo usuário.
+- [x] Configurar Root Directory Vercel = frontend.
+- [ ] Autenticar o provedor de backend após definir persistência.
 - [ ] Publicar backend e frontend e registrar URLs reais.
 - [ ] Validar fluxo completo, cookies, exports e autorização nos domínios públicos.

@@ -9,3 +9,10 @@
 - Backend Render: não criado. Falta escolher se os dados SQLite de teste podem ser descartados em reinícios e autenticar o provedor.
 - Nenhum recurso pago criado; nenhum banco local ou arquivo de credenciais incluído no envio.
 - Testes locais: 35 pytest, 4 E2E, build e lint passaram. Validação remota de API/login/exports continua pendente.
+
+## Envio confirmado ao GitHub
+
+- Primeiro commit `9b2bd77f9b1dac742cd766e8364f48f7c61d310e` enviado à branch `main`.
+- `git ls-remote origin refs/heads/main` confirmou esse SHA remoto.
+- Git local acompanha `origin/main`; código, testes, migrações e documentação publicados.
+- Root Directory do projeto Vercel atualizado para `frontend` pela CLI; nenhum deploy iniciado.
