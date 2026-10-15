@@ -2,7 +2,9 @@ import { test, expect, type Page } from "@playwright/test";
 async function login(page: Page, user: string) {
   await page.goto("/");
   await page.getByLabel("Usuário", { exact: true }).fill(user);
-  await page.getByLabel("Senha", { exact: true }).fill("DemoLocal!2026");
+  await page
+    .getByLabel("Senha", { exact: true })
+    .fill(process.env.E2E_PASSWORD || "DemoLocal!2026");
   await page.getByRole("button", { name: /Entrar no OS/ }).click();
   await expect(
     page.getByRole("heading", { name: "Gestão de demandas" }),

@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-Arquivos preparados e testes locais registrados em VALIDATION.md. Repositório informado: https://github.com/PedroGiffoni/OS_Manager. Projeto Vercel `os-manager` criado e confirmado pela CLI autenticada; ainda não há deployment nem domínio publicado. A integração Vercel retorna 403 no escopo da conta, mas a CLI tem acesso. O backend aguarda a escolha de persistência e autenticação no provedor. Consulte DEPLOYMENT_STATUS.md. Não forneça tokens ou senhas no chat; use a autenticação do provedor e seu painel de variáveis secretas.
+**Publicado e testado:** https://os-manager-phi.vercel.app (frontend) e https://os-manager-api.onrender.com (API). Usuário escolheu My Workspace e aceitou dados fictícios descartáveis no Render Free. Código em https://github.com/PedroGiffoni/OS_Manager. A CLI Vercel autenticada realizou o deploy; 4 E2E passaram no domínio estável. Contas, senha no painel e resultados: DEPLOYMENT_STATUS.md. Este guia descreve como reproduzir a configuração.
 
 ## Escolha de armazenamento antes do deploy
 
@@ -16,7 +16,7 @@ Fontes consultadas em 15/10/2026: [Render Free](https://render.com/docs/free), [
 
 ## 1. Disponibilizar somente o código
 
-O repositório informado pelo usuário é `PedroGiffoni/OS_Manager`, público, com a raiz em `os-manager` (NÃO a pasta de instalação do Pen). Somente o código deve ser enviado. O provedor precisa ter acesso ao repositório. Vercel CLI autenticada; backend ainda pendente.
+O repositório informado pelo usuário é `PedroGiffoni/OS_Manager`, público, com a raiz em `os-manager` (NÃO a pasta de instalação do Pen). Somente o código deve ser enviado. O provedor precisa ter acesso ao repositório. Vercel CLI autenticada; backend publicado no Render Free.
 
 O `.gitignore` exclui o SQLite, `.env`, `.venv`, dependências, resultados e credenciais locais da Vercel. O `.dockerignore` do backend exclui os dados e arquivos `.env`. Não envie o banco local: a publicação usa outro banco, criado por migrações.
 
@@ -77,7 +77,7 @@ O navegador chama `https://SEU-FRONTEND.vercel.app/api/v1/...`; a Vercel encamin
 6. Testar acesso móvel e anexo fictício pequeno; conferir logs de falhas sem credenciais.
 7. No perfil descartável, após aceitar perda dos dados, verificar suspensão/retomada: exemplos voltam, alterações e sessões anteriores não. Não simular restart de um banco que precise preservar.
 
-Execute novamente os testes locais após qualquer ajuste. Evidência local não substitui a verificação do domínio publicado. Enquanto não houver URLs e esses testes remotos, a publicação permanece pendente.
+Execute novamente os testes locais após qualquer ajuste. Evidência local não substitui a verificação do domínio publicado. Na publicação registrada em DEPLOYMENT_STATUS.md, os endereços foram verificados e os quatro fluxos do navegador passaram. Não foi realizado teste deliberado de suspensão/perda de dados; a limitação está documentada e foi aceita para testes.
 
 ## Atualização, interrupção e dados
 

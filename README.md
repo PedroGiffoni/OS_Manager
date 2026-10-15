@@ -131,4 +131,8 @@ docker-compose.yml
 Consulte também `docs/ARCHITECTURE.md`, `docs/PERMISSIONS.md`, `docs/METRICS.md`, `docs/DATABASE_MIGRATION.md`, `docs/DECISIONS.md` e `docs/KNOWN_LIMITATIONS.md`.
 ## Publicação para testes
 
-Configuração Vercel + backend Render Free, pré-requisitos de autenticação, cookies e limitações do SQLite efêmero: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). Código enviado a [PedroGiffoni/OS_Manager](https://github.com/PedroGiffoni/OS_Manager); projeto Vercel criado e configurado para `frontend`. O deploy funcional depende do backend e da escolha de persistência; não há URL publicada confirmada. Estado atual: [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md).
+Aplicação: **https://os-manager-phi.vercel.app** · Backend: https://os-manager-api.onrender.com · Código: [PedroGiffoni/OS_Manager](https://github.com/PedroGiffoni/OS_Manager).
+
+Contas de nuvem: os mesmos usuários fictícios descritos acima, mas com senha privada gerada para a publicação. Consulte **OS_MANAGER_DEMO_PASSWORD** no [painel Render](https://dashboard.render.com/web/srv-db8irum89jmc73dttfl0); não use a senha local na nuvem. O usuário autorizou SQLite descartável: alterações, anexos e sessões podem desaparecer quando o Render Free reinicia ou suspende. Use apenas exemplos fictícios.
+
+Publicação e fluxo verificados: health HTTP 200, build remoto e **4 E2E no domínio publicado passaram**. Estado, contas e como repetir: [DEPLOYMENT_STATUS.md](docs/DEPLOYMENT_STATUS.md). Guia de configuração: [DEPLOYMENT.md](docs/DEPLOYMENT.md).

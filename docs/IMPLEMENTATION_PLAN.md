@@ -24,9 +24,9 @@ SQLite permanece temporário para desenvolvimento e testes. Não houve homologa�
 - [x] Preparar proxy Vercel por domínio real, sem cache personalizado e sem quebrar cookies/CSRF.
 - [x] Seed de teste privado opcional e idempotente; banco local excluído do envio.
 - [x] Documentar deploy e executar backend/build/E2E locais (VALIDATION.md).
-- [ ] Definir com o usuário se o SQLite pode ser descartado em reinícios.
+- [x] Usuário escolheu My Workspace e autorizou SQLite descartável em reinícios.
 - [x] Autenticar Vercel CLI e enviar código ao repositório público informado pelo usuário.
 - [x] Configurar Root Directory Vercel = frontend.
-- [ ] Autenticar o provedor de backend após definir persistência.
-- [ ] Publicar backend e frontend e registrar URLs reais.
-- [ ] Validar fluxo completo, cookies, exports e autorização nos domínios públicos.
+- [x] Autenticar Render e criar serviço Free no workspace escolhido.
+- [x] Publicar backend e frontend e registrar URLs reais em DEPLOYMENT_STATUS.md.
+- [x] Executar quatro E2E no domínio estável; sessão/cookies, fluxo de horas e Excel passaram. API local mantém testes granulares de autorização e PDF.

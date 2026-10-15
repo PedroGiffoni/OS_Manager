@@ -17,3 +17,5 @@
 ## Publicação gratuita para testes (15/10/2026)
 
 Preparado backend Render Free com SQLite efêmero, sem mudar SGBD nem criar recursos pagos. A ativação depende de aceitar reinicialização dos dados; a decisão continua pendente. Frontend Vercel utiliza proxy /api no mesmo domínio para preservar cookies Strict e CSRF. Origem HTTPS exata, Secure e senha privada de seed são obrigatórios no entrypoint de nuvem. Seed no startup é opt-in explícito para testes; nunca altera banco já inicializado.
+
+O usuário confirmou explicitamente `My Workspace` e dados fictícios descartáveis. Render Free e Vercel foram publicados e testados; ver DEPLOYMENT_STATUS.md. O seed privado fica habilitado apenas para essa demonstração e nunca restaura alterações perdidas.

@@ -78,3 +78,12 @@ Verificar frontend em http://localhost:8080, health em http://127.0.0.1:8000/api
 - A pasta não possui repositório Git remoto configurado. Integrações GitHub/Vercel/Render foram localizadas, mas nenhuma conexão foi confirmada.
 - `render.yaml`, entrypoint e gerador `scripts/configure_vercel.py` preparados. Nenhuma URL real foi inventada no arquivo Vercel; ele será gerado com a origem efetiva do backend.
 - **Não executados:** criação de serviço, build Docker remoto, deploy Vercel/Render, validação do Blueprint no provedor e testes dos domínios públicos. Dependem das contas e da escolha de persistência. Testes locais não homologam a hospedagem.
+
+
+## Publicação remota efetivamente executada — 15/10/2026
+
+Após autorização de My Workspace/dados descartáveis: Render Docker Free live; Vercel produção READY/promovida e Git conectado. URLs e IDs em DEPLOYMENT_STATUS.md. Health direto/pelo frontend HTTP 200 `status=ok`. Build Vercel npm ci + TypeScript + Vite passou (662 módulos, build remoto concluído), npm audit informou 0 vulnerabilidades. `scripts/run_remote_e2e.py --base-url https://os-manager-phi.vercel.app`: **4 passed (51.3s)**. A senha foi recebida por terminal oculto e fornecida apenas ao ambiente do processo filho; traces remotos desativados. Logs Render filtrados por error não retornaram eventos.
+
+O teste HTTP via `vercel curl` no domínio estável teve uma tentativa com timeout de 45 s; a verificação comum seguinte retornou 200 e os quatro testes do navegador passaram. O serviço gratuito pode ter retomada lenta. O primeiro domínio específico de deployment exigiu a autenticação Vercel já existente; o domínio estável foi acessado normalmente pelo navegador. Não foi removida a proteção da Vercel.
+
+Não executado teste de carga, recuperação de backup, suspensão deliberada ou homologação institucional. PDF e IDOR granular foram exercitados na suíte Python local, enquanto a suíte remota verifica o fluxo do navegador e Excel. Docker local ainda indisponível; Docker remoto foi construído e executado pelo Render.

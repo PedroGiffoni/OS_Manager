@@ -15,4 +15,4 @@
 Os testes executados e seus resultados constam em VALIDATION.md. Limitações não são declaração de homologação institucional.
 - A suíte Python emite aviso de depreciação da integração httpx/Starlette TestClient. Os testes passam; uma futura troca para httpx2 deve ser validada separadamente.
 
-- Publicação remota ainda pendente de autenticação e escolha de persistência. Render Free perde SQLite/anexos/sessões ao reiniciar, redeployar ou suspender; o Blueprint é apenas para teste descartável autorizado. Ver DEPLOYMENT.md. O build Docker remoto e a integração Vercel/Render ainda não foram executados.
+- Publicação de testes executada em Vercel/Render; build Docker remoto e quatro E2E no domínio estável passaram. Render Free perde SQLite/anexos/sessões em reinício, redeploy e suspensão; uso descartável foi autorizado. Ver DEPLOYMENT_STATUS.md. Docker local continua sem daemon validado. Health HTTP externo verificado; serviço criado via integração usa health de porta padrão do Render.
