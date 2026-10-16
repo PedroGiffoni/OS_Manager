@@ -31,10 +31,12 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   await admin.getByRole("button", { name: new RegExp(title) }).click();
   await admin.getByLabel("Mover atividade").selectOption("todo");
   await expect(admin.getByRole("dialog").locator(".badge.todo")).toBeVisible();
+  await admin.getByLabel("Mover atividade").focus();
   await admin.getByLabel("Mover atividade").selectOption("production");
-  await expect(admin.locator('.notice[role="status"]')).toContainText(
-    "horas previstas",
-  );
+  await expect(admin.getByRole("alertdialog")).toContainText("horas previstas");
+  await expect(admin.getByRole("alertdialog")).toHaveJSProperty("open", true);
+  await admin.getByRole("button", { name: "Entendi", exact: true }).click();
+  await expect(admin.getByLabel("Mover atividade")).toBeFocused();
   await expect(admin.getByLabel("Mover atividade")).toHaveValue("todo");
   await login(vendor, "fornecedor");
   await vendor.getByRole("link", { name: /Minhas tarefas/ }).click();
@@ -47,6 +49,18 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
     "realizada",
   );
   await vendor.getByLabel("Mover atividade").selectOption("production");
+  await expect(vendor.getByLabel("Mover atividade")).toHaveValue("production");
+  await vendor.getByLabel("Mover atividade").selectOption("review");
+  await expect(vendor.getByRole("alertdialog")).toContainText(
+    "horas utilizadas",
+  );
+  await expect(vendor.getByRole("alertdialog").locator("h2")).toHaveCSS(
+    "color",
+    "rgb(153, 27, 27)",
+  );
+  await vendor.screenshot({ path: "test-results/erro-horas-modal.png" });
+  await vendor.keyboard.press("Escape");
+  await expect(vendor.getByRole("alertdialog")).toHaveCount(0);
   await expect(vendor.getByLabel("Mover atividade")).toHaveValue("production");
   await vendor.getByLabel("Horas utilizadas (total)").fill("8");
   await vendor
@@ -142,15 +156,14 @@ test("arrastar inválido conserva a origem e interface responsiva", async ({
     steps: 15,
   });
   await page.mouse.up();
-  await expect(page.locator('.notice[role="status"]')).toContainText(
-    "horas previstas",
-  );
+  await expect(page.getByRole("alertdialog")).toContainText("horas previstas");
   await expect(
     page
       .locator(".kanban-column")
       .filter({ has: page.getByRole("heading", { name: /A fazer/ }) })
       .getByRole("button", { name: title, exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Entendi", exact: true }).click();
   await page.screenshot({
     path: "test-results/kanban-desktop.png",
     fullPage: true,

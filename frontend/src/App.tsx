@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useRef, type ReactNode } from "react";
 import { NavLink, Routes, Route, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -12,6 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { HoursErrorDialog } from "./HoursErrorDialog";
 import { api, download, setCsrf } from "./api";
 import {
   stages,
@@ -115,6 +116,8 @@ export default function App() {
   const client = useQueryClient();
   const [account, setAccount] = useState<Account | null>(null);
   const [notice, setNotice] = useState("");
+  const [hoursError, setHoursError] = useState("");
+  const hoursErrorTrigger = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [opened, setOpened] = useState<Task | null>(null);
   const [filters, setFilters] = useState({
@@ -140,6 +143,7 @@ export default function App() {
     retry: false,
   });
   const run: Run = async (action) => {
+    const trigger = document.activeElement as HTMLElement | null;
     setBusy(true);
     setNotice("");
     try {
@@ -149,7 +153,13 @@ export default function App() {
       });
       setNotice("Operação realizada.");
     } catch (error) {
-      setNotice((error as Error).message);
+      const message = (error as Error).message;
+      if (/Preencha as horas (previstas|utilizadas)/i.test(message)) {
+        hoursErrorTrigger.current = trigger;
+        setHoursError(message);
+      } else {
+        setNotice(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -269,6 +279,13 @@ export default function App() {
               )}
             </span>
           </div>
+          {hoursError && (
+            <HoursErrorDialog
+              message={hoursError}
+              returnFocus={hoursErrorTrigger.current}
+              onDismiss={() => setHoursError("")}
+            />
+          )}
           {notice && (
             <div className="notice" role="status">
               {notice}
