@@ -228,6 +228,19 @@ def validate_fields(fields, values):
             fail("Valor de campo excede o limite.")
 
 
+def estimate_required(db, task, status):
+    schema = current_schema(db, task)
+    return bool(
+        schema
+        and any(
+            field["type"] == "native"
+            and field.get("native_key") == "estimated_minutes"
+            and status in field["required_for"]
+            for field in schema.fields
+        )
+    )
+
+
 def move_task(db, user, task, data):
     version(task, data.version)
     if data.status not in STATUSES:
@@ -262,7 +275,7 @@ def move_task(db, user, task, data):
     else:
         if STATUSES.index(data.status) != STATUSES.index(origin) + 1:
             fail("Retornos e saltos de etapa não estão autorizados nesta versão.")
-        if data.status == "production" and task.estimated_minutes <= 0:
+        if estimate_required(db, task, data.status) and task.estimated_minutes <= 0:
             fail("Preencha as horas previstas para mover esta atividade para Em produção.")
         if data.status == "review" and task.used_minutes <= 0:
             fail("Preencha as horas utilizadas para mover esta atividade para Em revisão.")

@@ -43,7 +43,7 @@ from .schemas import (
     SupplierInput,
     SupplierCreate,
     RateInput,
-    TaskInput,
+    TaskCreate,
     TaskEdit,
     Move,
     HoursInput,
@@ -65,6 +65,7 @@ from .services import (
     set_supplier,
     assignment,
     current_schema,
+    estimate_required,
     validate_fields,
     validate_references,
     move_task,
@@ -497,7 +498,7 @@ def task_detail(identity: int, user=Depends(current_user), db=Depends(get_db)):
 
 
 @app.post(PREFIX + "/tasks", status_code=201)
-def create_task(data: TaskInput, user=Depends(current_user), db=Depends(get_db)):
+def create_task(data: TaskCreate, user=Depends(current_user), db=Depends(get_db)):
     require(user, "create_tasks")
     row = Task(
         title=data.title,
@@ -509,7 +510,30 @@ def create_task(data: TaskInput, user=Depends(current_user), db=Depends(get_db))
     db.add(row)
     db.flush()
     set_supplier(db, user, row, data.supplier_id)
-    audit(db, user, "task", row.id, "created")
+    if data.estimate_policy != "absent":
+        db.add(
+            SchemaVersion(
+                task_id=row.id,
+                version=1,
+                author_id=user.id,
+                values={},
+                fields=[
+                    {
+                        "id": "native_estimated_minutes",
+                        "label": "Horas previstas",
+                        "type": "native",
+                        "native_key": "estimated_minutes",
+                        "options": [],
+                        "required_for": ["production"]
+                        if data.estimate_policy == "required"
+                        else [],
+                        "visible_to": ["admin", "manager", "internal", "supplier"],
+                        "editable_by": ["supplier"],
+                    }
+                ],
+            )
+        )
+    audit(db, user, "task", row.id, "created", estimate_policy=data.estimate_policy)
     db.commit()
     return task_payload(db, user, row)
 
@@ -553,6 +577,7 @@ def put_hours(identity: int, data: HoursInput, user=Depends(current_user), db=De
         fail("Horas aprovadas exigem reabertura formal.", 409)
     if (
         row.status == "production"
+        and estimate_required(db, row, "production")
         and data.estimated_minutes <= 0
         or row.status == "review"
         and data.used_minutes <= 0

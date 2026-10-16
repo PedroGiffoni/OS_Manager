@@ -1,3 +1,4 @@
+from typing import Literal
 from datetime import date
 from pydantic import BaseModel, Field, ConfigDict, StrictInt
 
@@ -40,6 +41,10 @@ class TaskInput(Input):
     supplier_id: StrictInt | None = None
     due: date | None = None
     priority: StrictInt = 0
+
+
+class TaskCreate(TaskInput):
+    estimate_policy: Literal["absent", "optional", "required"] = "absent"
 
 
 class TaskEdit(TaskInput):

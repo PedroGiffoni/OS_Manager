@@ -80,7 +80,7 @@ export function FieldValueForm({
       ["estimated_minutes", "used_minutes"].includes(field.native_key ?? ""),
   );
   if (hasNativeHours && account.role === "supplier")
-    for (const key of ["estimated_minutes", "used_minutes"] as const)
+    for (const key of ["used_minutes"] as const)
       if (
         !fields.some(
           (field) => field.type === "native" && field.native_key === key,
@@ -198,8 +198,14 @@ function NativeField({
           );
         }}
       >
-        <Label title={field.label}>
+        <Label
+          title={
+            field.label +
+            (field.required_for.length ? " · obrigatório" : " · opcional")
+          }
+        >
           <input
+            aria-label={field.label}
             value={value}
             inputMode="decimal"
             onChange={(event) => setValue(event.target.value)}
@@ -456,9 +462,9 @@ export function FieldBuilder({ task, run }: { task: Task; run: Run }) {
         pelo ícone ⠿ ou pelas ações Subir/Descer.
       </p>
       <div className="formula">
-        Campos nativos continuam ligados aos registros estruturais. Sua
-        presença, rótulo ou posição no card não desabilita horas, aprovação e
-        autorização obrigatórias.
+        Horas previstas são opcionais: adicione o campo somente se desejar e
+        escolha se a resposta será obrigatória. Horas utilizadas, aprovação e
+        autorização seguem protegidas.
       </div>
       <h3>Biblioteca de campos adicionais</h3>
       <div className="field-library">
@@ -562,26 +568,51 @@ export function FieldBuilder({ task, run }: { task: Task; run: Run }) {
                       />
                     </Label>
                   )}
-                  <Label title="Obrigatório ao entrar em">
-                    <select
-                      multiple
-                      value={field.required_for}
-                      onChange={(event) =>
-                        update(field.id, {
-                          required_for: Array.from(
-                            event.target.selectedOptions,
-                            (option) => option.value,
-                          ),
-                        })
-                      }
-                    >
-                      {Object.entries(stages).map(([id, label]) => (
-                        <option key={id} value={id}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </Label>
+                  {field.type === "native" &&
+                    field.native_key === "estimated_minutes" && (
+                      <Label title="Resposta obrigatória de horas previstas">
+                        <input
+                          type="checkbox"
+                          checked={field.required_for.includes("production")}
+                          onChange={(event) =>
+                            update(field.id, {
+                              required_for: event.target.checked
+                                ? ["production"]
+                                : [],
+                            })
+                          }
+                        />
+                        <small>
+                          Quando marcado, o fornecedor deve preencher antes de
+                          Em produção. Desmarcado: resposta opcional.
+                        </small>
+                      </Label>
+                    )}
+                  {!(
+                    field.type === "native" &&
+                    field.native_key === "estimated_minutes"
+                  ) && (
+                    <Label title="Obrigatório ao entrar em">
+                      <select
+                        multiple
+                        value={field.required_for}
+                        onChange={(event) =>
+                          update(field.id, {
+                            required_for: Array.from(
+                              event.target.selectedOptions,
+                              (option) => option.value,
+                            ),
+                          })
+                        }
+                      >
+                        {Object.entries(stages).map(([id, label]) => (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </Label>
+                  )}
                   <div className="form-grid">
                     {(["visible_to", "editable_by"] as const).map(
                       (property) => (

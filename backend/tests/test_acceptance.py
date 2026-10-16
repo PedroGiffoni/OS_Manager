@@ -8,7 +8,8 @@ P = "/api/v1"
 
 def create(clients, supplier=1):
     response = clients["admin"].post(
-        P + "/tasks", json={"title": "Teste de aceite", "supplier_id": supplier}
+        P + "/tasks",
+        json={"title": "Teste de aceite", "supplier_id": supplier, "estimate_policy": "required"},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -196,7 +197,9 @@ def test_card_schema_preserves_values_and_native_rules(clients):
         == 422
     )
     task = move(clients, task, "todo").json()
-    assert move(clients, task, "production").status_code == 422
+    task = move(clients, task, "production").json()
+    assert task["estimated_minutes"] == 0
+    assert move(clients, task, "review").status_code == 422
 
 
 def test_stale_drag_and_concurrent_approval(clients):
@@ -233,3 +236,64 @@ def test_pdf_content_respects_financial_permission(clients):
     operational = clients["supplier"].get(P + "/exports/pdf")
     text = " ".join(page.extract_text() for page in PdfReader(BytesIO(operational.content)).pages)
     assert "96000" not in text and "Custo aprovado" not in text and "centavos/hora" not in text
+
+
+def test_estimate_absent_optional_and_required_are_per_card(clients):
+    for policy in ["absent", "optional", "required"]:
+        response = clients["admin"].post(
+            P + "/tasks",
+            json={
+                "title": "Estimativa " + policy,
+                "supplier_id": 1,
+                "estimate_policy": policy,
+            },
+        )
+        assert response.status_code == 201, response.text
+        task = response.json()
+        assert len(task["fields"]) == (0 if policy == "absent" else 1)
+        task = move(clients, task, "todo").json()
+        result = move(clients, task, "production", "supplier")
+        if policy == "required":
+            assert result.status_code == 422
+            assert get(clients, task)["status"] == "todo"
+            # Only an authorized creator can change the field requirement.
+            assert (
+                clients["supplier"]
+                .put(
+                    f"{P}/tasks/{task['id']}/schema",
+                    json={
+                        "version": task["version"],
+                        "fields": [],
+                    },
+                )
+                .status_code
+                == 403
+            )
+            fields = task["fields"]
+            fields[0]["required_for"] = []
+            task = (
+                clients["admin"]
+                .put(
+                    f"{P}/tasks/{task['id']}/schema",
+                    json={
+                        "version": task["version"],
+                        "fields": fields,
+                    },
+                )
+                .json()
+            )
+            result = move(clients, task, "production", "supplier")
+        assert result.status_code == 200, result.text
+        task = result.json()
+        assert task["estimated_minutes"] == 0
+        assert move(clients, task, "review", "supplier").status_code == 422
+        result = hours(clients, task, 0, 480)
+        assert result.status_code == 200, result.text
+        task = move(clients, result.json(), "review", "supplier").json()
+        assert decision(clients, task).json()["cost_cents"] == 96000
+
+
+def test_default_card_has_no_estimate_field(clients):
+    response = clients["admin"].post(P + "/tasks", json={"title": "Sem estimativa"})
+    assert response.status_code == 201
+    assert response.json()["fields"] == []

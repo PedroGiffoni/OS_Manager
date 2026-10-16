@@ -133,7 +133,12 @@ export function TaskList({
                         ?.name ?? "Não atribuído"}
                     </td>
                     <td>
-                      {task.estimated_minutes / 60}h / {task.used_minutes / 60}h
+                      {task.fields.some(
+                        (field) => field.native_key === "estimated_minutes",
+                      )
+                        ? `${task.estimated_minutes / 60}h / `
+                        : "— / "}
+                      {task.used_minutes / 60}h
                     </td>
                     <td>{approvals[task.approval]}</td>
                   </tr>
@@ -175,6 +180,7 @@ function TaskForm({
   task?: Task;
   submit: (values: any) => Promise<void>;
 }) {
+  const [estimatePolicy, setEstimatePolicy] = useState("absent");
   const {
     register,
     handleSubmit,
@@ -197,7 +203,9 @@ function TaskForm({
           ...values,
           supplier_id: values.supplier_id ? Number(values.supplier_id) : null,
           due: values.due || null,
-          ...(task ? { version: task.version } : {}),
+          ...(task
+            ? { version: task.version }
+            : { estimate_policy: estimatePolicy }),
         }),
       )}
     >
@@ -205,6 +213,20 @@ function TaskForm({
         <input {...register("title")} />
       </Label>
       {errors.title && <small role="alert">{errors.title.message}</small>}
+      {!task && (
+        <Label title="Horas previstas no card">
+          <select
+            value={estimatePolicy}
+            onChange={(event) => setEstimatePolicy(event.target.value)}
+          >
+            <option value="absent">Não incluir</option>
+            <option value="optional">Incluir · resposta opcional</option>
+            <option value="required">
+              Incluir · obrigatório antes de Em produção
+            </option>
+          </select>
+        </Label>
+      )}
       <Label title="Descrição">
         <textarea {...register("description")} />
       </Label>
@@ -265,7 +287,13 @@ function DraggableTask({
       </button>
       <p>{task.description.slice(0, 95)}</p>
       <div>
-        <span className="badge">{task.estimated_minutes / 60}h previstas</span>
+        {task.fields.some(
+          (field) => field.native_key === "estimated_minutes",
+        ) && (
+          <span className="badge">
+            {task.estimated_minutes / 60}h previstas
+          </span>
+        )}
         {task.approval === "rejected" && (
           <span className="rejection">Corrigir horas</span>
         )}
@@ -563,8 +591,9 @@ export function TaskDetail({
                   ),
               ) && <HoursForm key={task.version} task={task} run={run} />}
             <p className="formula">
-              Horas previstas são exigidas para produção. Horas utilizadas são
-              exigidas para revisão. Conclusão exige gestor e aprovação.
+              Horas previstas seguem a configuração individual do card. Horas
+              utilizadas são exigidas para revisão. Conclusão exige gestor e
+              aprovação.
             </p>
             {account.permissions.includes("approve_hours") &&
               task.status === "review" && (
@@ -667,7 +696,6 @@ export function TaskDetail({
   );
 }
 function HoursForm({ task, run }: { task: Task; run: Run }) {
-  const [estimated, setEstimated] = useState(hourInput(task.estimated_minutes));
   const [used, setUsed] = useState(hourInput(task.used_minutes));
   return (
     <form
@@ -677,7 +705,7 @@ function HoursForm({ task, run }: { task: Task; run: Run }) {
         run(() =>
           api(`/tasks/${task.id}/hours`, "PUT", {
             version: task.version,
-            estimated_minutes: decimalToUnits(estimated, 60),
+            estimated_minutes: task.estimated_minutes,
             used_minutes: decimalToUnits(used, 60),
           }),
         );
@@ -685,13 +713,6 @@ function HoursForm({ task, run }: { task: Task; run: Run }) {
     >
       <h3>Apontamento do fornecedor</h3>
       <div className="form-grid">
-        <Label title="Horas previstas">
-          <input
-            inputMode="decimal"
-            value={estimated}
-            onChange={(event) => setEstimated(event.target.value)}
-          />
-        </Label>
         <Label title="Horas utilizadas (total)">
           <input
             inputMode="decimal"

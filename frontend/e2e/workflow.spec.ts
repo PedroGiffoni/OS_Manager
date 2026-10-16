@@ -20,6 +20,7 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   await login(admin, "gestor");
   await admin.getByRole("link", { name: /Backlog/ }).click();
   await admin.getByRole("button", { name: "Nova atividade" }).click();
+  await admin.getByLabel("Horas previstas no card").selectOption("required");
   const title = "Aceite E2E " + Date.now();
   await admin.getByLabel("Título", { exact: true }).fill(title);
   await admin
@@ -42,9 +43,7 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   await vendor.getByRole("link", { name: /Minhas tarefas/ }).click();
   await vendor.getByRole("button", { name: new RegExp(title) }).click();
   await vendor.getByLabel("Horas previstas", { exact: true }).fill("10");
-  await vendor
-    .getByRole("button", { name: "Salvar / reapresentar horas" })
-    .click();
+  await vendor.getByRole("button", { name: "Salvar Horas previstas" }).click();
   await expect(vendor.locator('.notice[role="status"]')).toContainText(
     "realizada",
   );
@@ -62,10 +61,8 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   await vendor.keyboard.press("Escape");
   await expect(vendor.getByRole("alertdialog")).toHaveCount(0);
   await expect(vendor.getByLabel("Mover atividade")).toHaveValue("production");
-  await vendor.getByLabel("Horas utilizadas (total)").fill("8");
-  await vendor
-    .getByRole("button", { name: "Salvar / reapresentar horas" })
-    .click();
+  await vendor.getByLabel("Horas utilizadas", { exact: true }).fill("8");
+  await vendor.getByRole("button", { name: "Salvar Horas utilizadas" }).click();
   await expect(vendor.locator('.notice[role="status"]')).toContainText(
     "realizada",
   );
@@ -130,7 +127,7 @@ test("arrastar inválido conserva a origem e interface responsiva", async ({
   const task = await (
     await page.request.post("/api/v1/tasks", {
       headers: { "X-CSRF-Token": me.csrf },
-      data: { title, supplier_id: 1 },
+      data: { title, supplier_id: 1, estimate_policy: "required" },
     })
   ).json();
   await page.request.post(`/api/v1/tasks/${task.id}/move`, {
@@ -213,6 +210,7 @@ test("campos nativos ordenáveis continuam ligados às horas estruturais", async
   await admin
     .getByRole("button", { name: "+ Horas utilizadas (nativo)", exact: true })
     .click();
+  await admin.getByLabel("Resposta obrigatória de horas previstas").check();
   await admin.getByLabel("Rótulo").first().fill("Planejado nativo");
   await admin.getByLabel("Rótulo").last().fill("Realizado nativo");
   await admin
@@ -256,6 +254,48 @@ test("campos nativos ordenáveis continuam ligados às horas estruturais", async
   ).json();
   expect(persisted.used_minutes).toBe(480);
   expect(persisted).not.toHaveProperty("rate_cents");
+  await adminContext.close();
+  await vendorContext.close();
+});
+
+test("criador escolhe não incluir ou incluir horas previstas opcionais", async ({
+  browser,
+}) => {
+  const adminContext = await browser.newContext();
+  const vendorContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  const vendor = await vendorContext.newPage();
+  await login(admin, "admin");
+  await login(vendor, "fornecedor");
+  for (const policy of ["absent", "optional"]) {
+    await admin.getByRole("link", { name: /Backlog/ }).click();
+    await admin.getByRole("button", { name: "Nova atividade" }).click();
+    const title = `Estimativa ${policy} ${Date.now()}`;
+    await admin.getByLabel("Título", { exact: true }).fill(title);
+    await admin
+      .getByLabel("Fornecedor responsável")
+      .selectOption({ label: "Ana Exemplo" });
+    await admin.getByLabel("Horas previstas no card").selectOption(policy);
+    await admin
+      .getByRole("button", { name: "Salvar atividade", exact: true })
+      .click();
+    await admin.getByRole("button", { name: new RegExp(title) }).click();
+    await admin.getByLabel("Mover atividade").selectOption("todo");
+    await expect(admin.getByLabel("Mover atividade")).toHaveValue("todo");
+    await vendor.reload();
+    await vendor.getByRole("link", { name: /Minhas tarefas/ }).click();
+    await vendor.getByRole("button", { name: new RegExp(title) }).click();
+    await expect(
+      vendor.getByLabel("Horas previstas", { exact: true }),
+    ).toHaveCount(policy === "absent" ? 0 : 1);
+    await vendor.getByLabel("Mover atividade").selectOption("production");
+    await expect(vendor.getByLabel("Mover atividade")).toHaveValue(
+      "production",
+    );
+    await expect(vendor.getByRole("alertdialog")).toHaveCount(0);
+    await vendor.getByRole("button", { name: "Fechar atividade" }).click();
+    await admin.getByRole("button", { name: "Fechar atividade" }).click();
+  }
   await adminContext.close();
   await vendorContext.close();
 });
