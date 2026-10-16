@@ -1,13 +1,22 @@
 from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
-from .models import Sprint, SprintTask, Audit
+from .models import Sprint, SprintTask, Audit, SchemaVersion
 from .repositories import filtered_tasks
 from .security import allowed
 from .services import task_payload, cost_cents
 from .settings import local_today, timestamp_date
 
 
-def records(db, user, status=None, sprint_id=None, supplier_id=None, starts=None, ends=None):
+def records(
+    db,
+    user,
+    status=None,
+    sprint_id=None,
+    supplier_id=None,
+    starts=None,
+    ends=None,
+    field_context=None,
+):
     rows = list(
         db.scalars(
             filtered_tasks(
@@ -34,6 +43,7 @@ def records(db, user, status=None, sprint_id=None, supplier_id=None, starts=None
     financial = user.role in {"admin", "manager"} and allowed(user, "view_financial")
     for task in rows:
         payload = task_payload(db, user, task)
+        payload["creator_id"] = task.creator_id
         if sprint_id is not None and financial:
             payload["cost_cents"] = cost_cents(db, task, sprint_id)
         if sprint and sprint.state == "closed" and links[task.id].snapshot:
@@ -54,11 +64,33 @@ def records(db, user, status=None, sprint_id=None, supplier_id=None, starts=None
                     payload[key] = snapshot[key]
             if financial:
                 payload["cost_cents"] = snapshot["cost_cents"]
+                payload["rate_cents"] = snapshot.get("rate_cents")
+            payload["sprint_id"] = sprint_id
+            schema = (
+                db.get(SchemaVersion, snapshot["schema_version_id"])
+                if snapshot.get("schema_version_id")
+                else None
+            )
+            payload["fields"] = (
+                [field for field in schema.fields if user.role in field["visible_to"]]
+                if schema
+                else []
+            )
+            payload["values"] = {
+                field["id"]: payload.get(field["native_key"])
+                if field["type"] == "native"
+                else schema.values.get(field["id"])
+                for field in payload["fields"]
+            }
             payload["read_only"] = True
         if supplier_id is not None and payload["supplier_id"] != supplier_id:
             continue
         if not status or payload["status"] == status:
             result.append(payload)
+    if field_context:
+        from .report_filters import apply_filters
+
+        return apply_filters(db, result, *field_context)
     return result
 
 

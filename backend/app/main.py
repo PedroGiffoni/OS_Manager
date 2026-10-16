@@ -847,6 +847,7 @@ def sprint_action(
                 "due": task.due,
                 "completed_at": completed_at,
                 "schema_version_id": schema.id if schema else None,
+                "rate_cents": assignment(db, task).rate_cents if assignment(db, task) else None,
                 "status": task.status,
                 "estimated_minutes": task.estimated_minutes,
                 "used_minutes": task.used_minutes,
@@ -913,6 +914,7 @@ def audit_history(entity: str, identity: int, user=Depends(current_user), db=Dep
 
 @app.get(PREFIX + "/dashboard")
 def dashboard(
+    field_filters: str = Query(default="[]", max_length=12000),
     status: str | None = None,
     sprint_id: int | None = None,
     supplier_id: int | None = None,
@@ -923,7 +925,10 @@ def dashboard(
 ):
     from .reporting import records, indicators
 
-    rows = records(db, user, status, sprint_id, supplier_id, starts, ends)
+    from .report_filters import filter_context
+
+    context = filter_context(db, user, field_filters, sprint_id)
+    rows = records(db, user, status, sprint_id, supplier_id, starts, ends, context)
     result = indicators(db, rows)
     if user.role in {"admin", "manager"} and allowed(user, "view_financial"):
         result["cost_cents"] = sum(row["cost_cents"] for row in rows)
@@ -941,7 +946,7 @@ def dashboard(
     result["sprint_evolution"] = []
     visible = db.scalars(select(Sprint).order_by(Sprint.starts, Sprint.id))
     for sprint in visible:
-        sprint_rows = records(db, user, status, sprint.id, supplier_id, starts, ends)
+        sprint_rows = records(db, user, status, sprint.id, supplier_id, starts, ends, context)
         if sprint_rows:
             summary = indicators(db, sprint_rows)
             result["sprint_evolution"].append(
@@ -959,6 +964,7 @@ def dashboard(
 def export(
     format: str,
     financial: bool = False,
+    field_filters: str = Query(default="[]", max_length=12000),
     status: str | None = None,
     sprint_id: int | None = None,
     supplier_id: int | None = None,
@@ -979,8 +985,19 @@ def export(
     from .reporting import records, indicators
     from .exports import build_export
 
-    rows = records(db, user, status, sprint_id, supplier_id, starts, ends)
+    from .report_filters import filter_context
+
+    context = filter_context(db, user, field_filters, sprint_id)
+    rows = records(db, user, status, sprint_id, supplier_id, starts, ends, context)
+    from .report_filters import filter_summary
+
+    if any(
+        item["financial"] and any(rule.field == item["key"] for rule in context[0])
+        for item in context[1]
+    ):
+        require(user, "export_financial")
     filters = {
+        "campos": filter_summary(*context),
         "status": status,
         "sprint_id": sprint_id,
         "supplier_id": supplier_id,
@@ -1010,6 +1027,10 @@ def export(
 from .collaboration import router as collaboration_router
 
 app.include_router(collaboration_router)
+
+from .report_routes import router as report_router
+
+app.include_router(report_router)
 
 
 @app.put(PREFIX + "/sprints/{identity}")

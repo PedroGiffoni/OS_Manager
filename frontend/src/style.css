@@ -907,3 +907,44 @@ summary {
   outline: 3px solid #991b1b;
   outline-offset: 4px;
 }
+
+.report-filter-panel {
+  margin-bottom: 24px;
+}
+.report-condition {
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  margin: 16px 0;
+  padding: 16px;
+  min-width: 0;
+}
+.report-condition legend {
+  font-weight: 700;
+  color: #284b5d;
+  padding: 0 6px;
+}
+.report-condition-grid {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.report-condition-grid label {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.report-condition-grid select,
+.report-condition-grid input {
+  width: 100%;
+}
+.report-condition-grid > button {
+  margin-bottom: 12px;
+}
+.report-filter-panel .actions {
+  flex-wrap: wrap;
+}
+table caption {
+  text-align: left;
+  padding: 12px 0;
+  color: #516574;
+}

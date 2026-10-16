@@ -299,3 +299,138 @@ test("criador escolhe não incluir ou incluir horas previstas opcionais", async 
   await adminContext.close();
   await vendorContext.close();
 });
+
+test("relatórios combinam campos do card e exportam o mesmo recorte", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  const me = await (await page.request.get("/api/v1/auth/me")).json();
+  const stamp = Date.now();
+  const region = "region_" + stamp;
+  const amount = "amount_" + stamp;
+  const headers = { "X-CSRF-Token": me.csrf };
+  const names = [
+    `Relatório selecionado ${stamp}`,
+    `Relatório excluído ${stamp}`,
+  ];
+  for (let index = 0; index < 2; index++) {
+    const created = await page.request.post("/api/v1/tasks", {
+      headers,
+      data: { title: names[index], supplier_id: 1 },
+    });
+    expect(created.status()).toBe(201);
+    const task = await created.json();
+    const configured = await page.request.put(
+      `/api/v1/tasks/${task.id}/schema`,
+      {
+        headers,
+        data: {
+          version: task.version,
+          fields: [
+            {
+              id: region,
+              label: "Regional relatório " + stamp,
+              type: "select",
+              options: ["Norte", "Sul"],
+            },
+            {
+              id: amount,
+              label: "Quantidade relatório " + stamp,
+              type: "number",
+            },
+          ],
+          values: { [region]: "Norte", [amount]: index === 0 ? "8" : "2" },
+        },
+      },
+    );
+    expect(configured.status()).toBe(200);
+  }
+  await page.getByRole("link", { name: /Relatórios/ }).click();
+  await page.getByRole("button", { name: "Adicionar filtro" }).click();
+  await page
+    .getByLabel("Campo do filtro 1", { exact: true })
+    .selectOption("field:" + region);
+  await expect(
+    page
+      .getByLabel("Campo do filtro 1", { exact: true })
+      .getByRole("option", { name: "Descrição", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("Valor do filtro 1", { exact: true })
+    .selectOption("Norte");
+  await page.getByRole("button", { name: "Adicionar filtro" }).click();
+  await page
+    .getByLabel("Campo do filtro 2", { exact: true })
+    .selectOption("field:" + amount);
+  await page
+    .getByLabel("Condição do filtro 2", { exact: true })
+    .selectOption("gte");
+  await page.getByLabel("Valor do filtro 2", { exact: true }).fill("5");
+  await page
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    page.getByText("1 atividade(s) encontrada(s).", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: names[0], exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: names[1], exact: true }),
+  ).toHaveCount(0);
+  const requestPromise = page.waitForRequest((request) =>
+    request.url().includes("/exports/xlsx?"),
+  );
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar Excel (.xlsx)" }).click();
+  const request = await requestPromise;
+  const applied = JSON.parse(
+    new URL(request.url()).searchParams.get("field_filters")!,
+  );
+  expect(applied).toHaveLength(2);
+  expect(applied[1]).toMatchObject({
+    field: "field:" + amount,
+    op: "gte",
+    value: "5",
+  });
+  expect((await downloadPromise).suggestedFilename()).toBe("os-manager.xlsx");
+  const pdf = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar PDF" }).click();
+  expect((await pdf).suggestedFilename()).toBe("os-manager.pdf");
+  await page.screenshot({
+    path: "test-results/relatorio-filtros-desktop.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: "test-results/relatorio-filtros-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Remover filtro 2", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    page.getByText("2 atividade(s) encontrada(s).", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Valor do filtro 1", { exact: true })
+    .selectOption("Sul");
+  await page
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    page.getByText("Nenhuma atividade atende aos filtros selecionados."),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Limpar filtros de campos", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Campo do filtro 1", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("cell", { name: names[0], exact: true }),
+  ).toBeVisible();
+});

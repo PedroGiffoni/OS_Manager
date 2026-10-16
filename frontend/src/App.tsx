@@ -12,6 +12,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { ReportFilters, type ReportCondition } from "./ReportFilters";
 import { HoursErrorDialog } from "./HoursErrorDialog";
 import { api, download, setCsrf } from "./api";
 import {
@@ -422,6 +423,7 @@ export default function App() {
               path="/relatorios"
               element={
                 <Reports
+                  key={filters.sprint_id}
                   query={params.toString()}
                   financial={can("export_financial") && can("view_financial")}
                   run={run}
@@ -610,14 +612,104 @@ function Reports({
   run: Run;
 }) {
   const [include, setInclude] = useState(false);
+  const [conditions, setConditions] = useState<ReportCondition[]>([]);
+  const [paging, setPaging] = useState({ query: "", index: 0 });
+  const params = new URLSearchParams(query);
+  if (conditions.length)
+    params.set("field_filters", JSON.stringify(conditions));
+  const reportQuery = params.toString();
+  const page = paging.query === reportQuery ? paging.index : 0;
+  const preview = useQuery({
+    queryKey: ["report-preview", reportQuery, page],
+    queryFn: () =>
+      api<{ total: number; filters: string[]; items: Task[] }>(
+        `/reports/preview?${reportQuery}&offset=${page * 25}`,
+      ),
+  });
   return (
     <>
-      <Dashboard query={query} />
+      <ReportFilters
+        sprintId={params.get("sprint_id")}
+        onApply={(rows) => {
+          setConditions(rows);
+          setPaging({ query: "", index: 0 });
+        }}
+      />
+      <Dashboard query={reportQuery} />
+      <section className="panel">
+        <h2>Prévia do relatório</h2>
+        {preview.isPending && <p role="status">Carregando atividades…</p>}
+        {preview.isError && <p role="alert">{preview.error.message}</p>}
+        {preview.data && (
+          <>
+            <p role="status">
+              {preview.data.total} atividade(s) encontrada(s).
+            </p>
+            {preview.data.filters.length > 0 && (
+              <ul aria-label="Filtros aplicados">
+                {preview.data.filters.map((filter, index) => (
+                  <li key={index}>{filter}</li>
+                ))}
+              </ul>
+            )}
+            {preview.data.total === 0 ? (
+              <Empty>Nenhuma atividade atende aos filtros selecionados.</Empty>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <caption>
+                    Atividades que atendem aos filtros aplicados
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Título</th>
+                      <th>Etapa</th>
+                      <th>Horas previstas</th>
+                      <th>Horas utilizadas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.data.items.map((task) => (
+                      <tr key={task.id}>
+                        <td>OS-{task.id}</td>
+                        <td>{task.title}</td>
+                        <td>{stages[task.status]}</td>
+                        <td>{task.estimated_minutes / 60} h</td>
+                        <td>{task.used_minutes / 60} h</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="actions">
+              <button
+                disabled={page === 0}
+                onClick={() =>
+                  setPaging({ query: reportQuery, index: page - 1 })
+                }
+              >
+                Página anterior
+              </button>
+              <span>Página {page + 1}</span>
+              <button
+                disabled={(page + 1) * 25 >= preview.data.total}
+                onClick={() =>
+                  setPaging({ query: reportQuery, index: page + 1 })
+                }
+              >
+                Próxima página
+              </button>
+            </div>
+          </>
+        )}
+      </section>
       <section className="panel">
         <h2>Exportar relatório</h2>
         <p>
-          Os filtros acima se aplicam ao arquivo. Fornecedores recebem somente
-          suas próprias atividades.
+          Os filtros aplicados acima se aplicam ao arquivo. Fornecedores recebem
+          somente suas próprias atividades.
         </p>
         {financial && (
           <Label title="Incluir custos aprovados">
@@ -631,15 +723,21 @@ function Reports({
         <div className="actions">
           <button
             className="primary"
+            disabled={!preview.data || preview.isFetching || preview.isError}
             onClick={() =>
-              run(() => download(`/exports/xlsx?${query}&financial=${include}`))
+              run(() =>
+                download(`/exports/xlsx?${reportQuery}&financial=${include}`),
+              )
             }
           >
             Exportar Excel (.xlsx)
           </button>
           <button
+            disabled={!preview.data || preview.isFetching || preview.isError}
             onClick={() =>
-              run(() => download(`/exports/pdf?${query}&financial=${include}`))
+              run(() =>
+                download(`/exports/pdf?${reportQuery}&financial=${include}`),
+              )
             }
           >
             Exportar PDF

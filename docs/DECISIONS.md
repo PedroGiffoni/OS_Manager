@@ -23,3 +23,7 @@ O usuário confirmou explicitamente `My Workspace` e dados fictícios descartáv
 
 ## Horas previstas configuráveis por atividade
 Por solicitação posterior do responsável pelo produto, a estimativa deixou de ser uma validação nativa universal. Na criação, o padrão é não incluir o campo. É possível incluir como opcional ou exigir resposta positiva antes de Em produção. O construtor permite adicionar/remover o campo e marcar/desmarcar a obrigatoriedade; a configuração é versionada e auditada. Cards existentes respeitam o schema salvo: ausência do campo ou required_for vazio não exige estimativa. Remover o campo não apaga minutos já registrados nem versões anteriores. Horas utilizadas positivas para revisão, aprovação e cálculo por tarifa congelada continuam obrigatórios. O armazenamento usa o schema versionado existente, sem alteração do esquema físico ou migração de dados. Esta decisão substitui o requisito anterior de estimativa sempre obrigatória, inclusive nos documentos anteriores.
+
+
+## Filtros por itens dos cards nos relatórios
+Todos os campos nativos e personalizados visíveis, exceto descrição, podem compor condições tipadas combinadas por E. A prévia, os indicadores e os exports recebem o mesmo filtro validado pelo servidor. Campos individuais mantêm seus IDs, mesmo com rótulos iguais. Sprint encerrada usa seu schema histórico. Detalhes e limites: [REPORT_FILTERS.md](REPORT_FILTERS.md).
