@@ -47,3 +47,56 @@ def preview(
             {key: row[key] for key in keys if key in row} for row in rows[offset : offset + limit]
         ],
     }
+
+
+@router.get("/analysis")
+def analysis(
+    field_filters: str = Query(default="[]", max_length=12000),
+    status: str | None = None,
+    sprint_id: int | None = None,
+    supplier_id: int | None = None,
+    starts: date | None = None,
+    ends: date | None = None,
+    idle_days: int = Query(default=7, ge=1, le=3650),
+    min_phase_hours: str | None = Query(default=None, max_length=30),
+    overdue_only: bool = False,
+    only_reopened: bool = False,
+    approval_state: str | None = Query(
+        default=None, pattern="^(pending|approved|rejected|resubmitted)$"
+    ),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=25, ge=1, le=100),
+    user=Depends(current_user),
+    db=Depends(get_db),
+):
+    from .analytics import report
+
+    result = report(
+        db,
+        user,
+        {
+            "field_filters": field_filters,
+            "status": status,
+            "sprint_id": sprint_id,
+            "supplier_id": supplier_id,
+            "starts": starts,
+            "ends": ends,
+            "min_phase_hours": min_phase_hours,
+            "overdue_only": overdue_only,
+            "only_reopened": only_reopened,
+            "approval_state": approval_state,
+        },
+        idle_days=idle_days,
+    )
+    result["items"] = result["items"][offset : offset + limit]
+    result.update(offset=offset, limit=limit)
+    return result
+
+
+@router.get("/cards/{identity}")
+def card_analysis(
+    identity: int, sprint_id: int | None = None, user=Depends(current_user), db=Depends(get_db)
+):
+    from .analytics import card_detail
+
+    return card_detail(db, user, identity, sprint_id)

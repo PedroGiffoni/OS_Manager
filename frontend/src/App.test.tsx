@@ -5,7 +5,9 @@ describe("entrada individual", () => {
   it("valida os campos sem chamar a API", async () => {
     const fetcher = vi.spyOn(globalThis, "fetch");
     render(<Login onLogin={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Entrar no OS/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Entrar na Gestão de Demandas/ }),
+    );
     await waitFor(() =>
       expect(screen.getByText("Informe o usuário.")).toBeInTheDocument(),
     );

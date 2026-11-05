@@ -1,4 +1,4 @@
-# OS Manager
+# Gestão de Demandas
 
 Sistema web local em português para demandas, fornecedores, sprints, Kanban, configuração individual de cards, horas, aprovações e relatórios. Frontend React/TypeScript; API FastAPI; SQLAlchemy e Alembic; SQLite persistente. Nenhuma conta externa, banco servidor ou serviço pago é necessário para funcionar após instalar as dependências.
 

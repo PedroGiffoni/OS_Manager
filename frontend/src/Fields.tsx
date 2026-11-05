@@ -1,3 +1,4 @@
+import { GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -366,7 +367,7 @@ function SortableField({
         {...listeners}
         aria-label={"Reordenar " + field.label}
       >
-        ⠿
+        <GripVertical size={18} aria-hidden="true" />
       </button>
       {children}
     </article>
@@ -459,7 +460,7 @@ export function FieldBuilder({ task, run }: { task: Task; run: Run }) {
     >
       <p>
         Arraste um campo da biblioteca para esta área ou use os botões. Reordene
-        pelo ícone ⠿ ou pelas ações Subir/Descer.
+        pela alça ou pelas ações Subir/Descer.
       </p>
       <div className="formula">
         Horas previstas são opcionais: adicione o campo somente se desejar e
@@ -657,7 +658,7 @@ export function FieldBuilder({ task, run }: { task: Task; run: Run }) {
                         setFields(arrayMove(fields, index, index - 1))
                       }
                     >
-                      ↑ Subir
+                      <ArrowUp size={16} aria-hidden="true" /> Subir
                     </button>
                     <button
                       disabled={index === fields.length - 1}
@@ -665,7 +666,7 @@ export function FieldBuilder({ task, run }: { task: Task; run: Run }) {
                         setFields(arrayMove(fields, index, index + 1))
                       }
                     >
-                      ↓ Descer
+                      <ArrowDown size={16} aria-hidden="true" /> Descer
                     </button>
                     <button
                       onClick={() =>

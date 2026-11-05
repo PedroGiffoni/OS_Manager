@@ -82,7 +82,7 @@ def build_export(format, rows, summary, financial, filters):
             metrics.append(["Definição", formula])
         metrics.column_dimensions["A"].width = 25
         metrics.column_dimensions["B"].width = 110
-        book.properties.creator = "OS Manager"
+        book.properties.creator = "Gestão de Demandas"
         book.save(buffer)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
@@ -91,7 +91,7 @@ def build_export(format, rows, summary, financial, filters):
         body.fontSize = 8
         body.leading = 11
         story = [
-            Paragraph("OS Manager · Relatório de atividades", styles["Title"]),
+            Paragraph("Gestão de Demandas · Relatório de atividades", styles["Title"]),
             Paragraph(escape(str(filters)), body),
             Spacer(1, 14),
         ]
@@ -141,8 +141,8 @@ def build_export(format, rows, summary, financial, filters):
             rightMargin=24,
             topMargin=25,
             bottomMargin=25,
-            title="OS Manager Relatório",
-            author="OS Manager",
+            title="Gestão de Demandas Relatório",
+            author="Gestão de Demandas",
         ).build(story)
         media = "application/pdf"
     buffer.seek(0)

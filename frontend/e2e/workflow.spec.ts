@@ -1,15 +1,61 @@
 import { test, expect, type Page } from "@playwright/test";
 async function login(page: Page, user: string) {
   await page.goto("/");
+  await expect(page).toHaveTitle("Gestão de Demandas");
   await page.getByLabel("Usuário", { exact: true }).fill(user);
   await page
     .getByLabel("Senha", { exact: true })
     .fill(process.env.E2E_PASSWORD || "DemoLocal!2026");
-  await page.getByRole("button", { name: /Entrar no OS/ }).click();
+  await page
+    .getByRole("button", { name: /Entrar na Gestão de Demandas/ })
+    .click();
   await expect(
-    page.getByRole("heading", { name: "Gestão de demandas" }),
+    page.getByRole("button", { name: "Sair", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Gestão de Demandas" }),
   ).toBeVisible();
 }
+async function textContrast(
+  page: Page,
+  textSelector: string,
+  surfaceSelector: string,
+) {
+  return page.evaluate(
+    ({ textSelector, surfaceSelector }) => {
+      const foreground = getComputedStyle(
+        document.querySelector(textSelector)!,
+      ).color;
+      const background = getComputedStyle(
+        document.querySelector(surfaceSelector)!,
+      ).backgroundColor;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d")!;
+      function luminance(color: string) {
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        const channels = Array.from(context.getImageData(0, 0, 1, 1).data)
+          .slice(0, 3)
+          .map((value) => {
+            const channel = value / 255;
+            return channel <= 0.04045
+              ? channel / 12.92
+              : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+        return (
+          channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
+        );
+      }
+      const values = [luminance(foreground), luminance(background)].sort(
+        (a, b) => b - a,
+      );
+      return (values[0] + 0.05) / (values[1] + 0.05);
+    },
+    { textSelector, surfaceSelector },
+  );
+}
+
 test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   browser,
 }) => {
@@ -53,10 +99,13 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   await expect(vendor.getByRole("alertdialog")).toContainText(
     "horas utilizadas",
   );
-  await expect(vendor.getByRole("alertdialog").locator("h2")).toHaveCSS(
-    "color",
-    "rgb(153, 27, 27)",
-  );
+  const errorColor = await vendor
+    .getByRole("alertdialog")
+    .locator("h2")
+    .evaluate((element) => getComputedStyle(element).color);
+  const channels = errorColor.match(/[\d.]+/g)!.map(Number);
+  expect(channels[0]).toBeGreaterThan(channels[1] * 2);
+  expect(channels[0]).toBeGreaterThan(channels[2] * 2);
   await vendor.screenshot({ path: "test-results/erro-horas-modal.png" });
   await vendor.keyboard.press("Escape");
   await expect(vendor.getByRole("alertdialog")).toHaveCount(0);
@@ -214,7 +263,7 @@ test("campos nativos ordenáveis continuam ligados às horas estruturais", async
   await admin.getByLabel("Rótulo").first().fill("Planejado nativo");
   await admin.getByLabel("Rótulo").last().fill("Realizado nativo");
   await admin
-    .getByRole("button", { name: "↓ Descer", exact: true })
+    .getByRole("button", { name: "Descer", exact: true })
     .first()
     .click();
   await admin.getByRole("button", { name: "Salvar configuração" }).click();
@@ -433,4 +482,287 @@ test("relatórios combinam campos do card e exportam o mesmo recorte", async ({
   await expect(
     page.getByRole("cell", { name: names[0], exact: true }),
   ).toBeVisible();
+});
+
+test("identidade Sebrae temas e navegação acessível no celular", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Gestão de Demandas",
+  );
+  await page.screenshot({
+    path: "test-results/sebrae-login-claro.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Ativar modo escuro" }).click();
+  await expect(page.locator("html")).toHaveClass("dark");
+  await page.screenshot({
+    path: "test-results/sebrae-login-escuro.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Ativar modo claro" }).click();
+  await login(page, "admin");
+  await expect(
+    page.getByRole("img", { name: "Sebrae", exact: true }).first(),
+  ).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.locator(".metrics .metric")).toHaveCount(4);
+  await page.screenshot({
+    path: "test-results/sebrae-dashboard-claro.png",
+    fullPage: true,
+  });
+  expect(
+    await textContrast(
+      page,
+      ".desktop-sidebar .nav-group-label",
+      ".desktop-sidebar",
+    ),
+  ).toBeGreaterThanOrEqual(4.5);
+  await page.getByRole("button", { name: "Recolher menu" }).click();
+  await expect(
+    page.getByRole("button", { name: "Expandir menu" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Expandir menu" }).click();
+  await page.getByRole("button", { name: "Ativar modo escuro" }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Ativar modo claro" }),
+  ).toBeVisible();
+  await expect(page.locator("html")).toHaveClass("dark");
+  await expect(page.locator(".metrics .metric")).toHaveCount(4);
+  expect(
+    await textContrast(
+      page,
+      ".desktop-sidebar a.active",
+      ".desktop-sidebar a.active",
+    ),
+  ).toBeGreaterThanOrEqual(4.5);
+  await page.screenshot({
+    path: "test-results/sebrae-dashboard-escuro.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+  const drawer = page.getByRole("dialog", {
+    name: "Menu principal",
+    exact: true,
+  });
+  await expect(drawer).toBeVisible();
+  await page.screenshot({
+    path: "test-results/sebrae-menu-mobile.png",
+    fullPage: true,
+  });
+  await page.keyboard.press("Escape");
+  await expect(drawer).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Abrir menu", exact: true }),
+  ).toBeFocused();
+  for (const label of ["Backlog", "Kanban", "Relatórios", "Visão geral"]) {
+    await page.getByRole("button", { name: "Abrir menu", exact: true }).click();
+    await drawer.getByRole("link", { name: label, exact: true }).click();
+    await expect(drawer).not.toBeVisible();
+    const size = await page.evaluate(() => ({
+      viewport: innerWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(size.content).toBeLessThanOrEqual(size.viewport + 1);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  }
+  await page.screenshot({
+    path: "test-results/sebrae-dashboard-mobile-escuro.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Ativar modo claro" }).click();
+  await page.screenshot({
+    path: "test-results/sebrae-dashboard-mobile-claro.png",
+    fullPage: true,
+  });
+});
+
+test("análise de cards mostra fases ciclos sprint backlog e exportação", async ({
+  browser,
+}) => {
+  const adminContext = await browser.newContext();
+  const vendorContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  const vendor = await vendorContext.newPage();
+  await login(admin, "admin");
+  await login(vendor, "fornecedor");
+  const adminMe = await (await admin.request.get("/api/v1/auth/me")).json();
+  const vendorMe = await (await vendor.request.get("/api/v1/auth/me")).json();
+  const headers = { "X-CSRF-Token": adminMe.csrf };
+  const title = "Análise operacional " + Date.now();
+  let task = await (
+    await admin.request.post("/api/v1/tasks", {
+      headers,
+      data: { title, supplier_id: 1 },
+    })
+  ).json();
+  const sprint = await (
+    await admin.request.post("/api/v1/sprints", {
+      headers,
+      data: {
+        name: title,
+        objective: "Aceite de análise",
+        starts: "2026-01-01",
+        ends: "2026-01-15",
+      },
+    })
+  ).json();
+  task = await (
+    await admin.request.post(`/api/v1/sprints/${sprint.id}/tasks`, {
+      headers,
+      data: { version: 1, task_id: task.id, task_version: task.version },
+    })
+  ).json();
+  expect(
+    (
+      await admin.request.post(`/api/v1/sprints/${sprint.id}/action`, {
+        headers,
+        data: { version: 2, action: "start" },
+      })
+    ).status(),
+  ).toBe(200);
+  task = await (
+    await admin.request.post(`/api/v1/tasks/${task.id}/move`, {
+      headers,
+      data: { version: task.version, status: "production" },
+    })
+  ).json();
+  task = await (
+    await vendor.request.put(`/api/v1/tasks/${task.id}/hours`, {
+      headers: { "X-CSRF-Token": vendorMe.csrf },
+      data: { version: task.version, estimated_minutes: 0, used_minutes: 120 },
+    })
+  ).json();
+  task = await (
+    await admin.request.post(`/api/v1/tasks/${task.id}/move`, {
+      headers,
+      data: { version: task.version, status: "review" },
+    })
+  ).json();
+  task = await (
+    await admin.request.post(`/api/v1/tasks/${task.id}/approval`, {
+      headers,
+      data: {
+        version: task.version,
+        hours_version: task.hours_version,
+        approved: true,
+        reason: "",
+      },
+    })
+  ).json();
+  task = await (
+    await admin.request.post(`/api/v1/tasks/${task.id}/move`, {
+      headers,
+      data: { version: task.version, status: "done" },
+    })
+  ).json();
+  expect(task.status).toBe("done");
+  expect(
+    (
+      await admin.request.post(`/api/v1/sprints/${sprint.id}/action`, {
+        headers,
+        data: { version: 3, action: "close" },
+      })
+    ).status(),
+  ).toBe(200);
+  expect(
+    (
+      await admin.request.post("/api/v1/tasks", {
+        headers,
+        data: { title: title + " pendente", supplier_id: 1 },
+      })
+    ).status(),
+  ).toBe(201);
+  await admin.getByRole("link", { name: "Relatórios", exact: true }).click();
+  await admin.getByRole("button", { name: "Adicionar filtro" }).click();
+  await admin.getByLabel("Valor do filtro 1", { exact: true }).fill(title);
+  await admin
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await expect(
+    admin.getByText("2 atividade(s) encontrada(s).", { exact: true }),
+  ).toBeVisible();
+  const detailButton = admin.getByRole("button", {
+    name: `Analisar card OS-${task.id}`,
+    exact: true,
+  });
+  await detailButton.click();
+  const dialog = admin.getByRole("dialog", { name: title, exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", {
+      name: "Tempo acumulado em cada fase",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: "Linha do tempo", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("Histórico parcial", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    dialog.getByText("Não se aplica sem estimativa", { exact: true }),
+  ).toBeVisible();
+  await admin.screenshot({ path: "test-results/analise-card-desktop.png" });
+  await admin.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(detailButton).toBeFocused();
+  await admin.getByRole("tab", { name: "Sprints", exact: true }).click();
+  await expect(
+    admin.getByRole("heading", { name: "Resumo de sprints", exact: true }),
+  ).toBeVisible();
+  await expect(admin.locator(".analysis-sprint")).toContainText("100%");
+  await admin.getByRole("tab", { name: "Backlog", exact: true }).click();
+  await expect(
+    admin.getByRole("heading", { name: "Análise do backlog", exact: true }),
+  ).toBeVisible();
+  await expect(
+    admin.getByRole("button", { name: title + " pendente", exact: true }),
+  ).toBeVisible();
+  await admin.getByRole("tab", { name: "Cards", exact: true }).click();
+  await admin.getByLabel("Somente reabertos", { exact: true }).check();
+  await admin
+    .getByRole("button", { name: "Aplicar análise", exact: true })
+    .click();
+  await expect(
+    admin.getByText("Nenhuma atividade atende aos filtros selecionados."),
+  ).toBeVisible();
+  await admin.getByLabel("Somente reabertos", { exact: true }).uncheck();
+  await admin
+    .getByRole("button", { name: "Aplicar análise", exact: true })
+    .click();
+  await expect(
+    admin.getByText("2 atividade(s) encontrada(s).", { exact: true }),
+  ).toBeVisible();
+  await admin.screenshot({
+    path: "test-results/analise-cards-desktop.png",
+    fullPage: true,
+  });
+  await admin.setViewportSize({ width: 390, height: 844 });
+  await detailButton.click();
+  await expect(dialog).toBeVisible();
+  expect(
+    await dialog.evaluate((element) => element.getBoundingClientRect().width),
+  ).toBeLessThan(390);
+  await admin.screenshot({ path: "test-results/analise-card-mobile.png" });
+  await admin
+    .getByRole("button", { name: "Fechar análise do card", exact: true })
+    .click();
+  const file = admin.waitForEvent("download");
+  await admin
+    .getByRole("button", { name: "Exportar Excel (.xlsx)", exact: true })
+    .click();
+  expect((await file).suggestedFilename()).toBe("os-manager.xlsx");
+  const profile = await (
+    await vendor.request.get(`/api/v1/reports/cards/${task.id}`)
+  ).json();
+  expect(profile).not.toHaveProperty("cost_cents");
+  expect(profile).not.toHaveProperty("rate_cents");
+  await adminContext.close();
+  await vendorContext.close();
 });

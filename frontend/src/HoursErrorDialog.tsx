@@ -1,3 +1,4 @@
+import { CircleAlert } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 export function HoursErrorDialog({
@@ -34,7 +35,7 @@ export function HoursErrorDialog({
       onKeyDown={(event) => event.stopPropagation()}
     >
       <span className="hours-error-icon" aria-hidden="true">
-        !
+        <CircleAlert size={26} aria-hidden="true" />
       </span>
       <h2 id="hours-error-title">Não foi possível mover a atividade</h2>
       <p id="hours-error-description">{message}</p>

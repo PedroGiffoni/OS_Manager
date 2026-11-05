@@ -1,4 +1,5 @@
 import { formatTimestamp, hourInput } from "./types";
+import { GripVertical, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -279,7 +280,7 @@ function DraggableTask({
           {...attributes}
           aria-label={"Arrastar " + task.title}
         >
-          ⠿
+          <GripVertical size={18} aria-hidden="true" />
         </button>
       </div>
       <button className="card-title" onClick={() => open(task)}>
@@ -382,7 +383,7 @@ export function Board({
     <>
       <div className="section-title">
         <h2>Quadro Kanban</h2>
-        <span>Arraste pelo ícone ⠿ ou abra o card para mover pelo menu.</span>
+        <span>Arraste pela alça ou abra o card para mover pelo menu.</span>
       </div>
       {rows.isPending ? (
         <Empty>Carregando quadro…</Empty>
@@ -502,7 +503,7 @@ export function TaskDetail({
         <div className="section-title">
           <span className="eyebrow">ATIVIDADE OS-{task.id}</span>
           <button onClick={close} autoFocus aria-label="Fechar atividade">
-            × Fechar
+            <X size={18} aria-hidden="true" /> Fechar
           </button>
         </div>
         <h2>{task.title}</h2>

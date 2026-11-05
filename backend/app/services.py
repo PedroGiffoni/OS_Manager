@@ -23,7 +23,7 @@ def fail(message, status=422, code="BUSINESS_RULE"):
     raise HTTPException(status, {"code": code, "message": message})
 
 
-def audit(db, actor, entity, identity, action, **details):
+def audit(db, actor, entity, identity, action, *, timestamp=None, **details):
     db.add(
         Audit(
             actor_id=actor.id,
@@ -31,6 +31,7 @@ def audit(db, actor, entity, identity, action, **details):
             entity_id=identity,
             action=action,
             details=details,
+            **({"created_at": timestamp} if timestamp else {}),
         )
     )
 

@@ -74,7 +74,7 @@ from .services import (
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(
-    title="OS Manager",
+    title="Gestão de Demandas",
     version="1.0.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
@@ -533,7 +533,9 @@ def create_task(data: TaskCreate, user=Depends(current_user), db=Depends(get_db)
                 ],
             )
         )
-    audit(db, user, "task", row.id, "created", estimate_policy=data.estimate_policy)
+    audit(
+        db, user, "task", row.id, "created", estimate_policy=data.estimate_policy, status="backlog"
+    )
     db.commit()
     return task_payload(db, user, row)
 
@@ -800,7 +802,16 @@ def include_task(identity: int, data: AssignSprint, user=Depends(current_user), 
     task.sprint_id, task.status = identity, "todo"
     sprint.version += 1
     db.add(SprintTask(task_id=task.id, sprint_id=identity))
-    audit(db, user, "task", task.id, "included_in_sprint", sprint_id=identity)
+    audit(
+        db,
+        user,
+        "task",
+        task.id,
+        "included_in_sprint",
+        sprint_id=identity,
+        origin="backlog",
+        destination="todo",
+    )
     db.commit()
     return task_payload(db, user, task)
 
@@ -814,8 +825,17 @@ def sprint_action(
     if not sprint or sprint.archived:
         fail("Sprint não encontrada.", 404)
     version(sprint, data.version)
+    event_time = datetime.now(timezone.utc).isoformat()
+    action_details = {}
     if data.action == "start" and sprint.state == "planned":
         sprint.state = "active"
+        action_details["committed_task_ids"] = list(
+            db.scalars(
+                select(SprintTask.task_id).where(
+                    SprintTask.sprint_id == identity, SprintTask.active_key == "active"
+                )
+            )
+        )
     elif data.action == "close" and sprint.state == "active":
         sprint.state = "closed"
         for link in db.scalars(
@@ -842,6 +862,8 @@ def sprint_action(
             schema = current_schema(db, task)
             link.snapshot = {
                 "previous_closure": previous_snapshot,
+                "closed_at": event_time,
+                "priority": task.priority,
                 "title": task.title,
                 "description": task.description,
                 "due": task.due,
@@ -868,6 +890,7 @@ def sprint_action(
                     "returned_to_backlog",
                     sprint_id=identity,
                     previous_status=previous_status,
+                    timestamp=event_time,
                 )
     elif data.action == "reopen" and sprint.state == "closed":
         require(user, "reopen_sprints")
@@ -880,7 +903,16 @@ def sprint_action(
                 link.active_key = "active"
     else:
         fail("Ação inválida para o estado da sprint.")
-    audit(db, user, "sprint", identity, data.action, reason=data.reason)
+    audit(
+        db,
+        user,
+        "sprint",
+        identity,
+        data.action,
+        reason=data.reason,
+        timestamp=event_time,
+        **action_details,
+    )
     db.commit()
     return {"ok": True}
 
@@ -964,6 +996,14 @@ def dashboard(
 def export(
     format: str,
     financial: bool = False,
+    analysis: bool = False,
+    idle_days: int = Query(default=7, ge=1, le=3650),
+    min_phase_hours: str | None = Query(default=None, max_length=30),
+    overdue_only: bool = False,
+    only_reopened: bool = False,
+    approval_state: str | None = Query(
+        default=None, pattern="^(pending|approved|rejected|resubmitted)$"
+    ),
     field_filters: str = Query(default="[]", max_length=12000),
     status: str | None = None,
     sprint_id: int | None = None,
@@ -1004,7 +1044,34 @@ def export(
         "starts": str(starts or ""),
         "ends": str(ends or ""),
     }
-    buffer, media = build_export(format, rows, indicators(db, rows), financial, filters)
+    if analysis:
+        from .analytics import report as operational_report
+        from .analytics_exports import build_export as build_operational_export
+
+        criteria = {
+            "field_filters": field_filters,
+            "status": status,
+            "sprint_id": sprint_id,
+            "supplier_id": supplier_id,
+            "starts": starts,
+            "ends": ends,
+            "min_phase_hours": min_phase_hours,
+            "overdue_only": overdue_only,
+            "only_reopened": only_reopened,
+            "approval_state": approval_state,
+        }
+        result = operational_report(db, user, criteria, idle_days=idle_days)
+        filters.update(
+            min_phase_hours=min_phase_hours,
+            overdue_only=overdue_only,
+            only_reopened=only_reopened,
+            approval_state=approval_state,
+            idle_days=idle_days,
+        )
+        buffer, media = build_operational_export(format, result, financial, filters)
+        rows = result["items"]
+    else:
+        buffer, media = build_export(format, rows, indicators(db, rows), financial, filters)
     audit(
         db,
         user,

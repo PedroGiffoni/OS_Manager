@@ -1,0 +1,330 @@
+/* Tokens oficiais da skill Sebrae CE. Blocos CSS puros, sem dependência de Tailwind. */
+:root {
+  /* === SEBRAE Design Tokens === */
+  /* Marca oficial Sebrae — Pantone 2935 C / HEX #2A4FDA */
+
+  /* Primary palette (immutable brand) */
+  --sebrae-blue: 228 70% 51%; /* SEBRAE Blue #2A4FDA */
+  --sebrae-orange: 228 70% 51%; /* alias mantido — usa azul institucional */
+
+  /* Extended SEBRAE blue scale */
+  --sebrae-blue-50: 228 90% 97%;
+  --sebrae-blue-100: 228 85% 92%;
+  --sebrae-blue-200: 228 80% 82%;
+  --sebrae-blue-300: 228 75% 70%;
+  --sebrae-blue-400: 228 72% 60%;
+  --sebrae-blue-500: 228 70% 51%;
+  --sebrae-blue-600: 228 72% 42%;
+  --sebrae-blue-700: 228 75% 32%;
+
+  /* Secondary accent — ciano Sebrae (apoio) */
+  --sebrae-orange-50: 196 90% 96%;
+  --sebrae-orange-100: 196 88% 88%;
+  --sebrae-orange-200: 196 85% 75%;
+  --sebrae-orange-300: 196 82% 60%;
+  --sebrae-orange-400: 196 82% 48%;
+  --sebrae-orange-500: 196 85% 40%;
+  --sebrae-orange-600: 196 88% 30%;
+
+  /* Complementary colors */
+  --sebrae-comp-blue-light: 228 90% 88%;
+  --sebrae-comp-blue-mid: 228 70% 65%;
+  --sebrae-comp-yellow: 46 98% 60%;
+  --sebrae-comp-gold: 42 90% 55%;
+  --sebrae-comp-red: 0 78% 52%;
+  --sebrae-comp-indigo: 245 75% 55%;
+  --sebrae-comp-lime: 152 70% 45%;
+
+  /* ===== LIGHT MODE (default) ===== */
+  --background: 210 25% 99%;
+  --foreground: 228 60% 12%;
+  --card: 0 0% 100%;
+  --card-foreground: 228 60% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 228 60% 12%;
+  --primary: 228 70% 51%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 196 85% 45%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 220 15% 94%;
+  --muted-foreground: 228 12% 42%;
+  --accent: 228 90% 96%;
+  --accent-foreground: 228 70% 25%;
+  /* Card icon surface — #84F4BC (verde menta SEBRAE) */
+  --card-icon: 196 83% 46%;
+  --card-icon-foreground: 0 0% 100%;
+  --destructive: 0 78% 52%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 18% 88%;
+  --input: 220 18% 88%;
+  --ring: 228 70% 51%;
+  --radius: 0.375rem;
+
+  /* Semantic feedback – light */
+  --success: 145 63% 32%;
+  --success-foreground: 0 0% 100%;
+  --success-bg: 145 50% 95%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 38 90% 18%;
+  --warning-bg: 38 90% 95%;
+  --error: 0 78% 52%;
+  --error-foreground: 0 0% 100%;
+  --error-bg: 0 70% 96%;
+  --info: 228 70% 60%;
+  --info-foreground: 0 0% 100%;
+  --info-bg: 228 90% 96%;
+
+  /* SEBRAE button accent — texto sobre azul institucional (rgb 231,247,158) */
+  --sebrae-btn-fg: 71 85% 79%;
+  --sebrae-btn-hover: 226 78% 40%; /* #183ab8 */
+
+  /* Sidebar – light */
+  --header-background: 228 70% 51%;
+  /* Header shell (top bar) — superfície clara com tinta institucional */
+  --header-surface: 227 100% 97%; /* #F1F4FF */
+  --header-surface-foreground: 228 70% 42%;
+  --header-surface-border: 220 18% 88%;
+  --sidebar-background: 228 72% 42%;
+  --sidebar-foreground: 228 30% 95%;
+  --sidebar-primary: 0 0% 100%;
+  --sidebar-primary-foreground: 228 70% 35%;
+  --sidebar-accent: 228 75% 35%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 228 60% 30%;
+  --sidebar-ring: 196 85% 50%;
+  --sidebar-muted: 228 25% 75%;
+
+  /* === Spacing tokens (escala base 4px) === */
+  --space-0: 0;
+  --space-px: 1px;
+  --space-0-5: 0.125rem; /* 2px */
+  --space-1: 0.25rem; /* 4px  */
+  --space-1-5: 0.375rem; /* 6px  */
+  --space-2: 0.5rem; /* 8px  */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-8: 2rem; /* 32px */
+  --space-10: 2.5rem; /* 40px */
+  --space-12: 3rem; /* 48px */
+  --space-14: 3.5rem; /* 56px */
+  --space-16: 4rem; /* 64px */
+  --space-20: 5rem; /* 80px */
+  --space-24: 6rem; /* 96px */
+  --space-32: 8rem; /* 128px */
+
+  /* === Typography scale (font-size) === */
+  /* Escala tipográfica ampliada (+1–2pt) para melhorar leitura */
+  --text-xs: 0.8125rem; /* 13px */
+  --text-sm: 0.9375rem; /* 15px */
+  --text-base: 1.0625rem; /* 17px */
+  --text-lg: 1.1875rem; /* 19px */
+  --text-xl: 1.375rem; /* 22px */
+  --text-2xl: 1.625rem; /* 26px */
+  --text-3xl: 2rem; /* 32px */
+  --text-4xl: 2.5rem; /* 40px */
+  --text-5xl: 3.25rem; /* 52px */
+  --text-6xl: 4rem; /* 64px */
+  --text-7xl: 4.75rem; /* 76px */
+
+  /* === Line heights (pareados com text-*) === */
+  /* Line-heights unitless — escalam com a fonte e melhoram leitura dos pequenos */
+  --leading-xs: 1.55;
+  --leading-sm: 1.6;
+  --leading-base: 1.6;
+  --leading-lg: 1.55;
+  --leading-xl: 1.45;
+  --leading-2xl: 1.35;
+  --leading-3xl: 1.25;
+  --leading-4xl: 1.2;
+  --leading-5xl: 1.15;
+  --leading-6xl: 1.1;
+  --leading-7xl: 1.05;
+  /* line-height utilitários (unitless) */
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+  --leading-loose: 1.9;
+
+  /* === Letter spacing === */
+  --tracking-tighter: -0.03em;
+  --tracking-tight: -0.015em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.05em;
+  --tracking-widest: 0.12em;
+
+  /* Font weights */
+  --font-light: 300;
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+  --font-extrabold: 800;
+
+  /* Shadows / Elevation – light */
+  --shadow-xs: 0 1px 2px 0 hsl(228 70% 30% / 0.05);
+  --shadow-sm:
+    0 1px 3px 0 hsl(228 70% 30% / 0.07), 0 1px 2px -1px hsl(228 70% 30% / 0.06);
+  --shadow-md:
+    0 4px 6px -1px hsl(228 70% 30% / 0.08),
+    0 2px 4px -2px hsl(228 70% 30% / 0.05);
+  --shadow-lg:
+    0 10px 15px -3px hsl(228 70% 30% / 0.09),
+    0 4px 6px -4px hsl(228 70% 30% / 0.05);
+  --shadow-xl:
+    0 20px 25px -5px hsl(228 70% 30% / 0.12),
+    0 8px 10px -6px hsl(228 70% 30% / 0.05);
+
+  /* Border radius tokens */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-full: 9999px;
+
+  /* Z-index tokens */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* Breakpoints (reference) */
+  --bp-sm: 640px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+
+  /* Icon size tokens */
+  --icon-xs: 14px; /* inline */
+  --icon-sm: 16px; /* default / botões */
+  --icon-md: 20px; /* nav / sidebar */
+  --icon-lg: 24px; /* headers / cards */
+  --icon-xl: 32px; /* display */
+  --icon-2xl: 48px; /* estado vazio */
+
+  /* Duration tokens */
+  --duration-fast: 100ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+  --duration-slower: 500ms;
+
+  /* Easing tokens */
+  --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* === Header Degradê Novo Sebrae Tokens === */
+  --sebrae-header-grad-start: #053665;
+  --sebrae-header-grad-end: #05549e;
+  --sebrae-header-height: 135px;
+  --sebrae-header-px: var(--space-8);
+  --sebrae-header-py: var(--space-5);
+  --sebrae-header-gap: var(--space-6);
+  --sebrae-header-divider: rgba(255, 255, 255, 0.4);
+  --sebrae-header-title-fs: 1.6875rem; /* 27px */
+  --sebrae-header-label-fs: var(--text-xs);
+  --sebrae-header-value-fs: var(--text-sm);
+  --sebrae-header-label-color: rgba(255, 255, 255, 0.75);
+  --sebrae-header-title-color: rgba(255, 255, 255, 0.92);
+  --sebrae-header-logo-h: 57.5px;
+  --sebrae-header-divider-h: 60px;
+}
+
+.dark {
+  --background: 210 25% 8%;
+  --foreground: 210 20% 90%;
+  --card: 210 22% 12%;
+  --card-foreground: 210 20% 90%;
+  --popover: 210 22% 12%;
+  --popover-foreground: 210 20% 90%;
+  --primary: 228 75% 62%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 196 80% 55%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 210 18% 18%;
+  --muted-foreground: 210 15% 60%;
+  --accent: 228 50% 22%;
+  --accent-foreground: 228 60% 85%;
+  /* Card icon surface — #84F4BC mantém-se no dark para reforçar identidade */
+  --card-icon: 196 83% 46%;
+  --card-icon-foreground: 0 0% 100%;
+  --destructive: 0 72% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 18% 22%;
+  --input: 210 18% 22%;
+  --ring: 228 75% 62%;
+
+  /* Semantic feedback – dark */
+  --success: 145 55% 42%;
+  --success-foreground: 0 0% 100%;
+  --success-bg: 145 30% 14%;
+  --warning: 38 88% 58%;
+  --warning-foreground: 38 90% 88%;
+  --warning-bg: 38 50% 14%;
+  --error: 0 72% 58%;
+  --error-foreground: 0 0% 100%;
+  --error-bg: 0 40% 14%;
+  --info: 228 70% 65%;
+  --info-foreground: 0 0% 100%;
+  --info-bg: 228 45% 16%;
+
+  /* Sidebar – dark */
+  --header-background: 228 75% 18%;
+  /* Header shell (top bar) — dark */
+  --header-surface: 210 22% 10%;
+  --header-surface-foreground: 228 75% 75%;
+  --header-surface-border: 210 18% 20%;
+  --sidebar-background: 210 25% 6%;
+  --sidebar-foreground: 210 20% 80%;
+  --sidebar-primary: 228 75% 62%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 22% 14%;
+  --sidebar-accent-foreground: 210 20% 90%;
+  --sidebar-border: 210 18% 16%;
+  --sidebar-ring: 196 80% 55%;
+  --sidebar-muted: 210 15% 50%;
+
+  /* Shadows – dark */
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.15);
+  --shadow-sm:
+    0 1px 3px 0 hsl(0 0% 0% / 0.2), 0 1px 2px -1px hsl(0 0% 0% / 0.15);
+  --shadow-md:
+    0 4px 6px -1px hsl(0 0% 0% / 0.25), 0 2px 4px -2px hsl(0 0% 0% / 0.15);
+  --shadow-lg:
+    0 10px 15px -3px hsl(0 0% 0% / 0.3), 0 4px 6px -4px hsl(0 0% 0% / 0.15);
+  --shadow-xl:
+    0 20px 25px -5px hsl(0 0% 0% / 0.35), 0 8px 10px -6px hsl(0 0% 0% / 0.15);
+
+  /* SEBRAE scales – dark adjusted */
+  --sebrae-blue-50: 228 40% 14%;
+  --sebrae-blue-100: 228 45% 20%;
+  --sebrae-blue-200: 228 50% 30%;
+  --sebrae-blue-300: 228 60% 45%;
+  --sebrae-blue-400: 228 70% 55%;
+  --sebrae-blue-500: 228 75% 65%;
+  --sebrae-blue-600: 228 78% 75%;
+  --sebrae-blue-700: 228 80% 85%;
+
+  --sebrae-orange-50: 196 40% 14%;
+  --sebrae-orange-100: 196 45% 20%;
+  --sebrae-orange-200: 196 55% 30%;
+  --sebrae-orange-300: 196 65% 45%;
+  --sebrae-orange-400: 196 75% 55%;
+  --sebrae-orange-500: 196 80% 65%;
+  --sebrae-orange-600: 196 85% 75%;
+}
+:root {
+  --heading-color: #005eb8;
+  --error-text: 0 70% 35%;
+  --overlay-ink: 228 60% 8%;
+}
+.dark {
+  --heading-color: hsl(var(--primary));
+  --error-text: 0 90% 80%;
+}

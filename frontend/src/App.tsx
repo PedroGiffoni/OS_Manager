@@ -1,5 +1,5 @@
 import { useState, useRef, type ReactNode } from "react";
-import { NavLink, Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -12,9 +12,27 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { OperationalReports } from "./OperationalReports";
+import { AppShell } from "./AppShell";
+import { useTheme } from "./useTheme";
+import {
+  Moon,
+  Sun,
+  ArrowRight,
+  ShieldCheck,
+  Layers3,
+  CalendarRange,
+  ClipboardCheck,
+  ClipboardList,
+  CircleCheck,
+  Clock3,
+  TriangleAlert,
+  X,
+  CalendarDays,
+} from "lucide-react";
 import { ReportFilters, type ReportCondition } from "./ReportFilters";
 import { HoursErrorDialog } from "./HoursErrorDialog";
-import { api, download, setCsrf } from "./api";
+import { api, setCsrf } from "./api";
 import {
   stages,
   money,
@@ -57,62 +75,137 @@ export function Login({ onLogin }: { onLogin: (user: Account) => void }) {
   } = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
   });
+  const [dark, toggleTheme] = useTheme();
   return (
     <main className="login">
-      <section className="login-brand">
-        <div className="brand-mark">
-          OS<span>Manager</span>
-        </div>
-        <h1>
-          Planejar.
-          <br />
-          Acompanhar.
-          <br />
-          Entregar.
-        </h1>
-        <p>Demandas, pessoas e resultados conectados em um só lugar.</p>
-        <small>GESTÃO DE OPERAÇÕES · V1</small>
-      </section>
-      <form
-        onSubmit={handleSubmit(async (values) => {
-          try {
-            onLogin(await api<Account>("/auth/login", "POST", values));
-          } catch (e) {
-            setError((e as Error).message);
-          }
-        })}
-      >
-        <span className="eyebrow">BEM-VINDO AO OS MANAGER</span>
-        <h2>Acesse seu espaço</h2>
-        <p>Use suas credenciais individuais para continuar.</p>
-        <Label title="Usuário">
-          <input autoComplete="username" {...register("username")} />
-        </Label>
-        {errors.username && (
-          <small role="alert">{errors.username.message}</small>
-        )}
-        <Label title="Senha">
-          <input
-            type="password"
-            autoComplete="current-password"
-            {...register("password")}
-          />
-        </Label>
-        {errors.password && (
-          <small role="alert">{errors.password.message}</small>
-        )}
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        <button className="primary" disabled={isSubmitting}>
-          {isSubmitting ? "Entrando…" : "Entrar no OS Manager →"}
+      <section className="login-form-panel">
+        <button
+          className="icon-button login-theme"
+          onClick={toggleTheme}
+          aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"}
+        >
+          {dark ? (
+            <Sun aria-hidden="true" size={20} />
+          ) : (
+            <Moon aria-hidden="true" size={20} />
+          )}
         </button>
-      </form>
+        <div className="login-identity">
+          <img
+            src={dark ? "/marca/sebrae-white.svg" : "/marca/sebrae-cor.svg"}
+            alt="Sebrae"
+            width="128"
+            height="72"
+          />
+          <span>Sebrae Ceará</span>
+        </div>
+        <span className="eyebrow">Gestão do trabalho</span>
+        <h1>Gestão de Demandas</h1>
+        <p>Um espaço para organizar demandas e acompanhar suas entregas.</p>
+        <form
+          onSubmit={handleSubmit(async (values) => {
+            try {
+              onLogin(await api<Account>("/auth/login", "POST", values));
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          })}
+        >
+          <h2>Acesse seu espaço</h2>
+          <p>Entre com suas credenciais individuais.</p>
+          <Label title="Usuário">
+            <input
+              autoComplete="username"
+              placeholder="Informe seu usuário"
+              aria-invalid={!!errors.username}
+              aria-describedby={errors.username ? "username-error" : undefined}
+              {...register("username")}
+            />
+          </Label>
+          {errors.username && (
+            <small id="username-error" role="alert" className="error">
+              {errors.username.message}
+            </small>
+          )}
+          <Label title="Senha">
+            <input
+              type="password"
+              autoComplete="current-password"
+              placeholder="Informe sua senha"
+              aria-invalid={!!errors.password}
+              aria-describedby={errors.password ? "password-error" : undefined}
+              {...register("password")}
+            />
+          </Label>
+          {errors.password && (
+            <small id="password-error" role="alert" className="error">
+              {errors.password.message}
+            </small>
+          )}
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          <button className="primary" disabled={isSubmitting}>
+            {isSubmitting ? "Entrando…" : "Entrar na Gestão de Demandas"}
+            <ArrowRight size={18} aria-hidden="true" />
+          </button>
+          <div className="login-security">
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>Seu acesso é individual e protegido por permissões.</span>
+          </div>
+        </form>
+        <p className="login-footer">Sebrae Ceará · Gestão de Demandas</p>
+      </section>
+      <section className="login-visual" aria-label="Sobre o sistema">
+        <span className="eyebrow">Planejamento e acompanhamento</span>
+        <h2>
+          Mais clareza
+          <br />
+          em cada entrega.
+        </h2>
+        <p>
+          Conecte o planejamento à execução e acompanhe o trabalho em um só
+          lugar.
+        </p>
+        <div className="login-features">
+          <div>
+            <Layers3 size={24} aria-hidden="true" />
+            <span>
+              <strong>Demandas organizadas</strong>
+              <small>Cards e fluxos de trabalho por atividade.</small>
+            </span>
+          </div>
+          <div>
+            <CalendarRange size={24} aria-hidden="true" />
+            <span>
+              <strong>Entregas acompanhadas</strong>
+              <small>Backlog, sprints e quadro Kanban.</small>
+            </span>
+          </div>
+          <div>
+            <ClipboardCheck size={24} aria-hidden="true" />
+            <span>
+              <strong>Gestão com rastreabilidade</strong>
+              <small>Horas, aprovações e relatórios da operação.</small>
+            </span>
+          </div>
+        </div>
+        <div className="login-visual-signature">
+          <img
+            src="/marca/sebrae-white.svg"
+            alt="Sebrae"
+            width="100"
+            height="56"
+          />
+          <span>Ao lado de quem faz acontecer.</span>
+        </div>
+      </section>
     </main>
   );
 }
+
 export default function App() {
   const client = useQueryClient();
   const [account, setAccount] = useState<Account | null>(null);
@@ -202,79 +295,27 @@ export default function App() {
       />
     );
   return (
-    <div className="shell" aria-busy={busy}>
-      <aside>
-        <div className="brand-mark">
-          OS<span>Manager</span>
-        </div>
-        <div className="workspace">
-          ESPAÇO DE TRABALHO
-          <br />
-          <strong>Gestão de demandas</strong>
-        </div>
-        <nav>
-          <NavLink to="/" end>
-            ◈ Visão geral
-          </NavLink>
-          <NavLink to="/backlog">
-            ≡ {account.role === "supplier" ? "Minhas tarefas" : "Backlog"}
-          </NavLink>
-          <NavLink to="/sprints">▣ Sprints</NavLink>
-          <NavLink to="/kanban">▤ Kanban</NavLink>
-          {can("approve_hours") && (
-            <NavLink to="/aprovacoes">✓ Aprovações de horas</NavLink>
-          )}
-          {account.role !== "supplier" && (
-            <NavLink to="/fornecedores">♙ Fornecedores</NavLink>
-          )}
-          <NavLink to="/relatorios">▥ Relatórios</NavLink>
-          {can("manage_users") && (
-            <NavLink to="/administracao">⚙ Administração</NavLink>
-          )}
-        </nav>
-        <div className="aside-bottom">
-          <span className="avatar">
-            {account.username.slice(0, 2).toUpperCase()}
-          </span>
-          <strong>{account.username}</strong>
-          <small>
-            {
-              (
-                {
-                  admin: "Administrador",
-                  manager: "Gestor",
-                  internal: "Usuário interno",
-                  supplier: "Fornecedor",
-                } as Record<string, string>
-              )[account.role]
-            }
-          </small>
-          <button
-            onClick={() =>
-              run(async () => {
-                await api("/auth/logout", "POST");
-                setAccount(null);
-                client.clear();
-              })
-            }
-          >
-            Sair
-          </button>
-        </div>
-      </aside>
-      <div className="content">
-        <header>
-          <span>OPERAÇÕES / OS MANAGER</span>
-          <span className="environment">● Ambiente local</span>
-        </header>
-        <main>
+    <>
+      <AppShell
+        account={account}
+        busy={busy}
+        onLogout={() =>
+          run(async () => {
+            await api("/auth/logout", "POST");
+            setAccount(null);
+            client.clear();
+          })
+        }
+      >
+        <main id="conteudo" tabIndex={-1}>
           <div className="page-heading">
             <div>
-              <span className="eyebrow">SEU TRABALHO EM PERSPECTIVA</span>
-              <h1>Gestão de demandas</h1>
+              <span className="eyebrow">Painel de operações</span>
+              <h1>Gestão de Demandas</h1>
               <p>Organize entregas e acompanhe cada etapa do trabalho.</p>
             </div>
             <span className="date">
+              <CalendarDays size={16} aria-hidden="true" />
               {new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(
                 new Date(),
               )}
@@ -291,7 +332,7 @@ export default function App() {
             <div className="notice" role="status">
               {notice}
               <button aria-label="Fechar aviso" onClick={() => setNotice("")}>
-                ×
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
           )}
@@ -443,11 +484,7 @@ export default function App() {
             <Route path="*" element={<Empty>Página não encontrada.</Empty>} />
           </Routes>
         </main>
-        <footer>
-          OS Manager{" "}
-          <span>Planejamento com clareza. Execução com rastreabilidade.</span>
-        </footer>
-      </div>
+      </AppShell>
       {opened && (
         <TaskDetail
           identity={opened.id}
@@ -457,9 +494,10 @@ export default function App() {
           close={() => setOpened(null)}
         />
       )}
-    </div>
+    </>
   );
 }
+
 function Dashboard({ query }: { query: string }) {
   const supplierNames =
     useQueryClient().getQueryData<Supplier[]>(["suppliers"]) ?? [];
@@ -474,18 +512,47 @@ function Dashboard({ query }: { query: string }) {
     <>
       <div className="section-title">
         <h2>Visão geral</h2>
-        <span>Dados do banco local</span>
+        <span>Indicadores do período selecionado</span>
       </div>
       <div className="metrics">
         {[
-          ["Tarefas planejadas", d.planned, "No escopo selecionado"],
-          ["Concluídas", d.done, `${d.completion_percent}% de conclusão`],
-          ["Pendentes", d.pending, "Entregas em andamento"],
-          ["Em atraso", d.overdue, "Com prazo vencido"],
-        ].map(([label, value, hint]) => (
-          <article className="metric" key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
+          {
+            label: "Tarefas planejadas",
+            value: d.planned,
+            hint: "No escopo selecionado",
+            icon: ClipboardList,
+            tone: "info",
+          },
+          {
+            label: "Concluídas",
+            value: d.done,
+            hint: `${new Intl.NumberFormat("pt-BR").format(Number(d.completion_percent))}% de conclusão`,
+            icon: CircleCheck,
+            tone: "success",
+          },
+          {
+            label: "Pendentes",
+            value: d.pending,
+            hint: "Entregas em andamento",
+            icon: Clock3,
+            tone: "warning",
+          },
+          {
+            label: "Em atraso",
+            value: d.overdue,
+            hint: "Com prazo vencido",
+            icon: TriangleAlert,
+            tone: "error",
+          },
+        ].map(({ label, value, hint, icon: Icon, tone }) => (
+          <article className="metric" key={label} data-tone={tone}>
+            <div className="metric-heading">
+              <span>{label}</span>
+              <span className="metric-icon">
+                <Icon size={20} aria-hidden="true" />
+              </span>
+            </div>
+            <strong>{new Intl.NumberFormat("pt-BR").format(value)}</strong>
             <small>{hint}</small>
           </article>
         ))}
@@ -501,13 +568,28 @@ function Dashboard({ query }: { query: string }) {
                 label: stages[row.status],
               }))}
             >
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 13, fill: "hsl(var(--muted-foreground))" }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: "hsl(var(--muted-foreground))" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  color: "hsl(var(--foreground))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                }}
+                labelStyle={{ color: "hsl(var(--foreground))" }}
+              />
               <Bar
+                isAnimationActive={false}
                 dataKey="count"
                 name="Atividades"
-                fill="#237e85"
+                fill="hsl(var(--primary))"
                 radius={[5, 5, 0, 0]}
               />
             </BarChart>
@@ -558,11 +640,35 @@ function Dashboard({ query }: { query: string }) {
           </p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={d.sprint_evolution}>
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="planned" name="Planejadas" fill="#b3cccc" />
-              <Bar dataKey="done" name="Concluídas" fill="#237e85" />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 13, fill: "hsl(var(--muted-foreground))" }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fill: "hsl(var(--muted-foreground))" }}
+              />
+              <Tooltip
+                contentStyle={{
+                  background: "hsl(var(--card))",
+                  color: "hsl(var(--foreground))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                }}
+                labelStyle={{ color: "hsl(var(--foreground))" }}
+              />
+              <Bar
+                dataKey="planned"
+                name="Planejadas"
+                fill="hsl(var(--secondary))"
+                isAnimationActive={false}
+              />
+              <Bar
+                isAnimationActive={false}
+                dataKey="done"
+                name="Concluídas"
+                fill="hsl(var(--primary))"
+              />
             </BarChart>
           </ResponsiveContainer>
         </section>
@@ -611,139 +717,23 @@ function Reports({
   financial: boolean;
   run: Run;
 }) {
-  const [include, setInclude] = useState(false);
   const [conditions, setConditions] = useState<ReportCondition[]>([]);
-  const [paging, setPaging] = useState({ query: "", index: 0 });
   const params = new URLSearchParams(query);
   if (conditions.length)
     params.set("field_filters", JSON.stringify(conditions));
   const reportQuery = params.toString();
-  const page = paging.query === reportQuery ? paging.index : 0;
-  const preview = useQuery({
-    queryKey: ["report-preview", reportQuery, page],
-    queryFn: () =>
-      api<{ total: number; filters: string[]; items: Task[] }>(
-        `/reports/preview?${reportQuery}&offset=${page * 25}`,
-      ),
-  });
   return (
     <>
       <ReportFilters
         sprintId={params.get("sprint_id")}
-        onApply={(rows) => {
-          setConditions(rows);
-          setPaging({ query: "", index: 0 });
-        }}
+        onApply={setConditions}
       />
-      <Dashboard query={reportQuery} />
-      <section className="panel">
-        <h2>Prévia do relatório</h2>
-        {preview.isPending && <p role="status">Carregando atividades…</p>}
-        {preview.isError && <p role="alert">{preview.error.message}</p>}
-        {preview.data && (
-          <>
-            <p role="status">
-              {preview.data.total} atividade(s) encontrada(s).
-            </p>
-            {preview.data.filters.length > 0 && (
-              <ul aria-label="Filtros aplicados">
-                {preview.data.filters.map((filter, index) => (
-                  <li key={index}>{filter}</li>
-                ))}
-              </ul>
-            )}
-            {preview.data.total === 0 ? (
-              <Empty>Nenhuma atividade atende aos filtros selecionados.</Empty>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <caption>
-                    Atividades que atendem aos filtros aplicados
-                  </caption>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Título</th>
-                      <th>Etapa</th>
-                      <th>Horas previstas</th>
-                      <th>Horas utilizadas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.data.items.map((task) => (
-                      <tr key={task.id}>
-                        <td>OS-{task.id}</td>
-                        <td>{task.title}</td>
-                        <td>{stages[task.status]}</td>
-                        <td>{task.estimated_minutes / 60} h</td>
-                        <td>{task.used_minutes / 60} h</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="actions">
-              <button
-                disabled={page === 0}
-                onClick={() =>
-                  setPaging({ query: reportQuery, index: page - 1 })
-                }
-              >
-                Página anterior
-              </button>
-              <span>Página {page + 1}</span>
-              <button
-                disabled={(page + 1) * 25 >= preview.data.total}
-                onClick={() =>
-                  setPaging({ query: reportQuery, index: page + 1 })
-                }
-              >
-                Próxima página
-              </button>
-            </div>
-          </>
-        )}
-      </section>
-      <section className="panel">
-        <h2>Exportar relatório</h2>
-        <p>
-          Os filtros aplicados acima se aplicam ao arquivo. Fornecedores recebem
-          somente suas próprias atividades.
-        </p>
-        {financial && (
-          <Label title="Incluir custos aprovados">
-            <input
-              type="checkbox"
-              checked={include}
-              onChange={(event) => setInclude(event.target.checked)}
-            />
-          </Label>
-        )}
-        <div className="actions">
-          <button
-            className="primary"
-            disabled={!preview.data || preview.isFetching || preview.isError}
-            onClick={() =>
-              run(() =>
-                download(`/exports/xlsx?${reportQuery}&financial=${include}`),
-              )
-            }
-          >
-            Exportar Excel (.xlsx)
-          </button>
-          <button
-            disabled={!preview.data || preview.isFetching || preview.isError}
-            onClick={() =>
-              run(() =>
-                download(`/exports/pdf?${reportQuery}&financial=${include}`),
-              )
-            }
-          >
-            Exportar PDF
-          </button>
-        </div>
-      </section>
+      <OperationalReports
+        key={reportQuery}
+        query={reportQuery}
+        financialExport={financial}
+        run={run}
+      />
     </>
   );
 }

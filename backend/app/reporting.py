@@ -48,8 +48,19 @@ def records(
             payload["cost_cents"] = cost_cents(db, task, sprint_id)
         if sprint and sprint.state == "closed" and links[task.id].snapshot:
             snapshot = links[task.id].snapshot
+            closed_event = db.scalar(
+                select(Audit)
+                .where(
+                    Audit.entity == "sprint", Audit.entity_id == sprint_id, Audit.action == "close"
+                )
+                .order_by(Audit.id.desc())
+            )
+            payload["history_as_of"] = snapshot.get("closed_at") or (
+                closed_event.created_at if closed_event else None
+            )
             for key in [
                 "status",
+                "priority",
                 "estimated_minutes",
                 "used_minutes",
                 "approval",
