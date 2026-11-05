@@ -132,6 +132,53 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
   const file = admin.waitForEvent("download");
   await admin.getByRole("button", { name: "Exportar Excel (.xlsx)" }).click();
   expect((await file).suggestedFilename()).toBe("os-manager.xlsx");
+  const htmlDownload = admin.waitForEvent("download");
+  await admin
+    .getByRole("button", { name: "Exportar HTML", exact: true })
+    .click();
+  const htmlFile = await htmlDownload;
+  expect(htmlFile.suggestedFilename()).toBe("os-manager.html");
+  const htmlPath = test.info().outputPath("report.html");
+  await htmlFile.saveAs(htmlPath);
+  const offline = await browser.newContext({
+    offline: true,
+    reducedMotion: "reduce",
+  });
+  const document = await offline.newPage();
+  await document.goto("file:///" + htmlPath.replace(/\\/g, "/"));
+  await expect(
+    document.getByRole("heading", { name: "Entregas em perspectiva" }),
+  ).toBeVisible();
+  await expect(
+    document.getByRole("heading", { name: "Ritmo das sprints" }),
+  ).toBeVisible();
+  expect(
+    await document
+      .locator(".track span")
+      .first()
+      .evaluate((node) => getComputedStyle(node).animationName),
+  ).toBe("none");
+  await document
+    .getByRole("button", { name: "Pausar animações", exact: true })
+    .click();
+  await expect(
+    document.getByRole("button", { name: "Ativar animações", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await document.screenshot({
+    path: "test-results/relatorio-html-desktop.png",
+    fullPage: true,
+  });
+  await document.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await document.evaluate(
+      () => window.document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await document.screenshot({
+    path: "test-results/relatorio-html-mobile.png",
+    fullPage: true,
+  });
+  await offline.close();
   await adminContext.close();
   await vendorContext.close();
 });
@@ -758,11 +805,100 @@ test("análise de cards mostra fases ciclos sprint backlog e exportação", asyn
     .getByRole("button", { name: "Exportar Excel (.xlsx)", exact: true })
     .click();
   expect((await file).suggestedFilename()).toBe("os-manager.xlsx");
-  const profile = await (
-    await vendor.request.get(`/api/v1/reports/cards/${task.id}`)
-  ).json();
-  expect(profile).not.toHaveProperty("cost_cents");
-  expect(profile).not.toHaveProperty("rate_cents");
+  await expect(
+    vendor.getByRole("link", { name: "Relatórios", exact: true }),
+  ).toHaveCount(0);
+  const blocked = await vendor.request.get(`/api/v1/reports/cards/${task.id}`);
+  expect(blocked.status()).toBe(403);
+  await vendor.goto("/relatorios");
+  await expect(
+    vendor.getByText("Acesso restrito a usuários internos.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    vendor.getByRole("button", { name: "Exportar HTML", exact: true }),
+  ).toHaveCount(0);
   await adminContext.close();
   await vendorContext.close();
+});
+
+test("administrador limpa todos os filtros para emitir relatório completo", async ({
+  page,
+}) => {
+  await login(page, "admin");
+  await page.getByRole("link", { name: "Relatórios", exact: true }).click();
+  const total = (
+    await (await page.request.get("/api/v1/reports/analysis")).json()
+  ).total;
+  await page
+    .getByRole("combobox", { name: "Status", exact: true })
+    .selectOption("production");
+  await page
+    .getByRole("combobox", { name: "Fornecedor", exact: true })
+    .selectOption("1");
+  await page.getByLabel("De", { exact: true }).fill("2026-01-01");
+  await page.getByLabel("Até", { exact: true }).fill("2026-01-02");
+  await page
+    .getByRole("button", { name: "+ Adicionar filtro", exact: true })
+    .click();
+  await page
+    .getByLabel("Valor do filtro 1", { exact: true })
+    .fill("SEM RESULTADO");
+  await page
+    .getByRole("button", { name: "Aplicar filtros", exact: true })
+    .click();
+  await page.getByLabel("Somente reabertos", { exact: true }).check();
+  await page.getByLabel("Somente com atraso", { exact: true }).check();
+  await page.getByLabel("Tempo mínimo na fase atual (horas)").fill("999");
+  await page
+    .getByRole("button", { name: "Aplicar análise", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "Relatório completo — limpar todos os filtros",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "Status", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "Fornecedor", exact: true }),
+  ).toHaveValue("");
+  await expect(page.getByLabel("De", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Até", { exact: true })).toHaveValue("");
+  await expect(
+    page.getByLabel("Valor do filtro 1", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel("Somente reabertos", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByLabel("Somente com atraso", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByLabel("Tempo mínimo na fase atual (horas)"),
+  ).toHaveValue("");
+  await expect(
+    page.getByText(`${total} atividade(s) encontrada(s).`, { exact: true }),
+  ).toBeVisible();
+  const request = page.waitForRequest((request) =>
+    request.url().includes("/exports/html?"),
+  );
+  await page
+    .getByRole("button", { name: "Exportar HTML", exact: true })
+    .click();
+  const params = new URL((await request).url()).searchParams;
+  for (const field of [
+    "status",
+    "supplier_id",
+    "sprint_id",
+    "starts",
+    "ends",
+    "field_filters",
+    "only_reopened",
+    "overdue_only",
+    "min_phase_hours",
+  ]) {
+    expect(params.has(field)).toBe(false);
+  }
 });

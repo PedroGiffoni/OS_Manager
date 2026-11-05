@@ -2,10 +2,19 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from .db import get_db
 from .security import current_user
+from .services import fail
 from .reporting import records
 from .report_filters import catalogue, filter_context, filter_summary
 
-router = APIRouter(prefix="/api/v1/reports", tags=["Relatórios"])
+
+def internal_reports(user=Depends(current_user)):
+    if user.role == "supplier":
+        fail("Relatórios disponíveis apenas para usuários internos.", 403)
+
+
+router = APIRouter(
+    prefix="/api/v1/reports", tags=["Relatórios"], dependencies=[Depends(internal_reports)]
+)
 
 
 @router.get("/fields")

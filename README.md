@@ -210,8 +210,8 @@ Em Linux/macOS, substitua os executáveis do virtualenv por `.venv/bin/python` e
 | `gestor` | Demandas, sprints, fornecedores/tarifas, aprovação e acesso financeiro |
 | `gestor_sem_aprovacao` | Gestão operacional; sem aprovação de horas e sem finanças |
 | `interno` | Criação de tarefas, configuração de cards, sprints e exportações operacionais |
-| `fornecedor` | Ana Exemplo: tarefas próprias, horas e exportação do próprio escopo |
-| `fornecedor2` | Bruno Exemplo: mesmo isolamento, sem acesso às tarefas de Ana |
+| `fornecedor` | Ana Exemplo: tarefas próprias e horas; sem acesso a relatórios |
+| `fornecedor2` | Bruno Exemplo: mesmo isolamento, sem relatórios nem acesso às tarefas de Ana |
 
 > [!NOTE]
 > **No site publicado, a senha é privada e diferente da senha local.** O responsável pelo ambiente pode consultá-la na variável `OS_MANAGER_DEMO_PASSWORD` no [painel do Render](https://dashboard.render.com/web/srv-db8irum89jmc73dttfl0/env). Não publique esse valor no repositório.

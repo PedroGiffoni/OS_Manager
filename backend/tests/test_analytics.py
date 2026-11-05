@@ -166,13 +166,13 @@ def test_api_scope_filters_and_financial_exports(clients):
     task = move(clients, task, "done").json()
     task = move(clients, task, "review", reason="Rever").json()
     other = create(clients, 2)
-    supplier = clients["supplier"]
-    result = supplier.get(P + "/reports/analysis")
+    manager = clients["manager"]
+    result = manager.get(P + "/reports/analysis")
     assert result.status_code == 200, result.text
-    assert result.json()["total"] == 1
-    assert "cost_cents" not in result.text and "rate_cents" not in result.text
-    assert supplier.get(f"{P}/reports/cards/{other['id']}").status_code == 404
-    detail = supplier.get(f"{P}/reports/cards/{task['id']}")
+    assert result.json()["total"] == 2
+    assert "cost_cents" in result.text
+    assert manager.get(f"{P}/reports/cards/{other['id']}").status_code == 200
+    detail = manager.get(f"{P}/reports/cards/{task['id']}")
     assert detail.status_code == 200 and detail.json()["reopen_count"] == 1
     assert "previous_cost_cents" not in detail.text
     for params, total in [
@@ -181,16 +181,18 @@ def test_api_scope_filters_and_financial_exports(clients):
         ({"overdue_only": True}, 0),
         ({"min_phase_hours": "99999"}, 0),
     ]:
-        response = supplier.get(P + "/reports/analysis", params=params)
+        response = manager.get(P + "/reports/analysis", params=params)
         assert response.status_code == 200, response.text
         assert response.json()["total"] == total
     for value in ["-1", "NaN", "Infinity"]:
         assert (
-            supplier.get(P + "/reports/analysis", params={"min_phase_hours": value}).status_code
+            manager.get(P + "/reports/analysis", params={"min_phase_hours": value}).status_code
             == 422
         )
-    assert supplier.get(P + "/exports/xlsx?analysis=true&financial=true").status_code == 403
-    exported = supplier.get(P + "/exports/xlsx?analysis=true&only_reopened=true")
+    assert (
+        clients["supplier"].get(P + "/exports/xlsx?analysis=true&financial=true").status_code == 403
+    )
+    exported = manager.get(P + "/exports/xlsx?analysis=true&only_reopened=true")
     assert exported.status_code == 200, exported.text
     book = load_workbook(BytesIO(exported.content))
     assert {
@@ -205,7 +207,7 @@ def test_api_scope_filters_and_financial_exports(clients):
     assert book["Cards"].max_row == 2
     text = str([list(sheet.values) for sheet in book])
     assert "Tarifa" not in text and "Custo" not in text and "previous_cost_cents" not in text
-    pdf = supplier.get(P + "/exports/pdf?analysis=true")
+    pdf = manager.get(P + "/exports/pdf?analysis=true")
     assert pdf.status_code == 200, pdf.text
     assert len(PdfReader(BytesIO(pdf.content)).pages) > 0
     admin_export = clients["admin"].get(P + "/exports/xlsx?analysis=true&financial=true")
@@ -296,3 +298,63 @@ def test_analysis_applies_custom_filters_and_pagination(clients):
         P + "/exports/xlsx", params={"analysis": True, "field_filters": conditions}
     )
     assert load_workbook(BytesIO(exported.content))["Cards"].max_row == 2
+
+
+def test_html_report_scope_escaping_filters_and_portable_assets(clients, tmp_path):
+    task = (
+        clients["admin"]
+        .post(P + "/tasks", json={"title": "<script>alert(1)</script> Relatório", "supplier_id": 1})
+        .json()
+    )
+    other = (
+        clients["admin"]
+        .post(P + "/tasks", json={"title": "SEGREDO OUTRO FORNECEDOR", "supplier_id": 2})
+        .json()
+    )
+    supplier = clients["supplier"]
+    response = clients["manager"].get(P + "/exports/html")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/html")
+    assert "os-manager.html" in response.headers["content-disposition"]
+    html = response.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script>alert(1)</script>" not in html
+    assert other["title"] in html
+    assert "Custo consolidado" not in html and "rate_cents" not in html
+    assert "data:font/woff2;base64," in html and "data:image/svg+xml;base64," in html
+    assert "prefers-reduced-motion" in html and "default-src 'none'" in html
+    assert html.count("<h1>") == 1
+    assert supplier.get(P + "/exports/html?financial=true").status_code == 403
+    filtered = clients["manager"].get(P + "/exports/html", params={"only_reopened": True})
+    assert task["title"] not in filtered.text
+    assert "Nenhum card encontrado" in filtered.text
+    admin = clients["admin"].get(P + "/exports/html?financial=true")
+    assert admin.status_code == 200 and "Custo consolidado" in admin.text
+    (tmp_path / "report.html").write_text(admin.text, encoding="utf-8")
+    preview_pdf = clients["admin"].get(P + "/exports/pdf?analysis=true&financial=true")
+    assert preview_pdf.status_code == 200
+    (tmp_path / "report.pdf").write_bytes(preview_pdf.content)
+
+
+def test_supplier_cannot_consult_or_export_reports(clients):
+    own = create(clients)
+    other = create(clients, 2)
+    for client in [clients["supplier"], clients["other"]]:
+        paths = [
+            "/reports/fields",
+            "/reports/preview",
+            "/reports/analysis",
+            f"/reports/cards/{own['id']}",
+            f"/reports/cards/{other['id']}",
+        ]
+        paths += [
+            f"/exports/{fmt}{query}"
+            for fmt in ["xlsx", "pdf", "html"]
+            for query in ["", "?analysis=true", "?financial=true"]
+        ]
+        for path in paths:
+            response = client.get(P + path)
+            assert response.status_code == 403, (path, response.text)
+            assert "Teste de aceite" not in response.text
+    assert clients["supplier"].get(f"{P}/tasks/{own['id']}").status_code == 200
+    assert clients["supplier"].get(f"{P}/tasks/{other['id']}").status_code == 404

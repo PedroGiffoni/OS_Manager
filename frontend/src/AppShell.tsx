@@ -88,7 +88,7 @@ function Navigation({
       label: "Relatórios",
       icon: ChartNoAxesCombined,
       group: "Gestão",
-      visible: true,
+      visible: account.role !== "supplier",
     },
     {
       to: "/administracao",

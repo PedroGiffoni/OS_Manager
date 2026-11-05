@@ -86,7 +86,7 @@ def test_hours_transitions_and_snapshot(clients):
     assert move(clients, approved, "done", "supplier").status_code == 403
     done = move(clients, approved, "done").json()
     assert done["status"] == "done"
-    reopened = move(clients, done, "review", reason="Correção autorizada").json()
+    reopened = move(clients, done, "review", reason="CorreÃ§Ã£o autorizada").json()
     assert reopened["cost_cents"] == 0 and reopened["approval"] == "pending"
     assert hours(clients, reopened, 600, 420).status_code == 200
 
@@ -102,9 +102,7 @@ def test_horizontal_financial_exports_and_csrf(clients):
     assert clients["supplier"].get(P + "/exports/xlsx?financial=true").status_code == 403
     assert "cost" not in clients["supplier"].get(P + "/dashboard").text
     response = clients["supplier"].get(P + "/exports/xlsx")
-    sheet = load_workbook(BytesIO(response.content)).active
-    assert sheet.max_row == 2
-    assert "Custo" not in str(list(sheet.values))
+    assert response.status_code == 403
     client = clients["admin"]
     token = client.headers.pop("X-CSRF-Token")
     assert client.post(P + "/tasks", json={"title": "CSRF"}).status_code == 403
@@ -173,7 +171,7 @@ def test_card_schema_preserves_values_and_native_rules(clients):
     task = create(clients)
     field = {
         "id": "evidence",
-        "label": "Evidência",
+        "label": "EvidÃªncia",
         "type": "short_text",
         "required_for": ["production"],
     }
@@ -233,7 +231,7 @@ def test_pdf_content_respects_financial_permission(clients):
     financial = clients["admin"].get(P + "/exports/pdf?financial=true")
     text = " ".join(page.extract_text() for page in PdfReader(BytesIO(financial.content)).pages)
     assert "96000" in text and "Custo aprovado" in text
-    operational = clients["supplier"].get(P + "/exports/pdf")
+    operational = clients["manager"].get(P + "/exports/pdf")
     text = " ".join(page.extract_text() for page in PdfReader(BytesIO(operational.content)).pages)
     assert "96000" not in text and "Custo aprovado" not in text and "centavos/hora" not in text
 

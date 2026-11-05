@@ -27,3 +27,6 @@ Por solicitação posterior do responsável pelo produto, a estimativa deixou de
 
 ## Filtros por itens dos cards nos relatórios
 Todos os campos nativos e personalizados visíveis, exceto descrição, podem compor condições tipadas combinadas por E. A prévia, os indicadores e os exports recebem o mesmo filtro validado pelo servidor. Campos individuais mantêm seus IDs, mesmo com rótulos iguais. Sprint encerrada usa seu schema histórico. Detalhes e limites: [REPORT_FILTERS.md](REPORT_FILTERS.md).
+
+## Relatórios exclusivos para usuários internos — 05/11/2026
+Por decisão do responsável, fornecedores deixam de acessar consultas e exportações de relatórios, incluindo cards próprios e qualquer formato (Excel/PDF/HTML). O bloqueio ocorre na API, no menu e na URL da página. Tarefas, horas e visão geral do próprio escopo continuam disponíveis. Esta regra substitui a permissão anterior de exportação operacional pelo fornecedor.

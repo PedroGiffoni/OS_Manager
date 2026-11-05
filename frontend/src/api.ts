@@ -36,7 +36,8 @@ export async function download(path: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = "os-manager." + (path.includes("/xlsx") ? "xlsx" : "pdf");
+  const extension = path.split("?")[0].split("/").pop();
+  anchor.download = "os-manager." + extension;
   anchor.click();
   URL.revokeObjectURL(url);
 }

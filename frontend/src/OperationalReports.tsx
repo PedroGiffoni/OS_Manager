@@ -1072,8 +1072,9 @@ export function OperationalReports({
         <h2>Exportar relatório</h2>
         <p>
           Excel inclui cards, fases, linha do tempo, aprovações, sprints e
-          backlog. PDF apresenta o mesmo recorte com seus históricos. Durações
-          exportadas em segundos corridos.
+          backlog. PDF apresenta o mesmo recorte com seus históricos. HTML reúne
+          dashboards, gráficos e detalhes em um documento interativo que abre
+          sem internet, com animações opcionais e versão para impressão.
         </p>
         {financialExport && (
           <Label title="Incluir custos aprovados">
@@ -1111,6 +1112,19 @@ export function OperationalReports({
           >
             <FileText size={18} aria-hidden="true" />
             Exportar PDF
+          </button>
+          <button
+            disabled={!data || response.isFetching || response.isError}
+            onClick={() =>
+              run(() =>
+                download(
+                  `/exports/html?${reportQuery}&analysis=true&financial=${include}`,
+                ),
+              )
+            }
+          >
+            <FileText size={18} aria-hidden="true" />
+            Exportar HTML
           </button>
         </div>
       </section>

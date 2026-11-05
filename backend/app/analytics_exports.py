@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 from xml.sax.saxutils import escape
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
@@ -10,6 +11,10 @@ from .report_filters import STATUSES, APPROVALS
 
 
 def build_export(format, data, financial, filters):
+    if format == "html":
+        from .html_report import build_html
+
+        return build_html(data, financial, filters)
     cards = data["items"]
     sheets = {}
     headings = [
@@ -258,8 +263,25 @@ def build_export(format, data, financial, filters):
         book.save(buffer)
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.graphics.shapes import Drawing, Rect, String
+        from .html_report import duration, number
+
+        assets = Path(__file__).parent / "report_assets"
+        for name, file in [("Figtree", "figtree.ttf"), ("Lato", "lato.ttf")]:
+            if name not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont(name, str(assets / file)))
+        pdfmetrics.registerFontFamily(
+            "Figtree", normal="Figtree", bold="Figtree", italic="Figtree", boldItalic="Figtree"
+        )
         styles = getSampleStyleSheet()
+        for style in styles.byName.values():
+            style.fontName = "Figtree"
+        styles["Title"].textColor = colors.HexColor("#005EB8")
+        styles["Heading1"].textColor = colors.HexColor("#005EB8")
         body = styles["BodyText"]
+        body.fontName = "Lato"
         body.fontSize = 8
         body.leading = 11
 
@@ -287,12 +309,85 @@ def build_export(format, data, financial, filters):
             )
             return result
 
+        def chart(title, values):
+            drawing = Drawing(745, 42 + len(values) * 26)
+            drawing.add(
+                String(
+                    0,
+                    drawing.height - 16,
+                    title,
+                    fontName="Figtree",
+                    fontSize=12,
+                    fillColor=colors.HexColor("#005EB8"),
+                )
+            )
+            maximum = max((value for _, value, _ in values), default=0) or 1
+            for index, (label, value, formatted) in enumerate(values):
+                y = drawing.height - 44 - index * 26
+                drawing.add(String(0, y, label, fontName="Figtree", fontSize=9))
+                drawing.add(
+                    Rect(
+                        135, y - 2, 470, 10, fillColor=colors.HexColor("#eef0f5"), strokeColor=None
+                    )
+                )
+                drawing.add(
+                    Rect(
+                        135,
+                        y - 2,
+                        470 * value / maximum,
+                        10,
+                        fillColor=colors.HexColor("#2A4FDA"),
+                        strokeColor=None,
+                    )
+                )
+                drawing.add(String(620, y, formatted, fontName="Lato", fontSize=9))
+            return drawing
+
+        done = sum(card["status"] == "done" for card in cards)
+        summary_table = table(
+            ["Cards no recorte", "Concluídos", "Em atraso", "Aguardando aprovação"],
+            [[len(cards), done, data["summary"]["overdue"], data["summary"]["waiting_approval"]]],
+            [185, 185, 185, 170],
+        )
         story = [
             Paragraph("Gestão de Demandas", styles["Title"]),
             Paragraph("Análise operacional de cards sprints e backlog", styles["Heading1"]),
             text("Gerado em UTC: " + data["as_of"]),
+            Spacer(1, 16),
+            summary_table,
+            Spacer(1, 16),
+            chart(
+                "Distribuição das demandas",
+                [
+                    (STATUSES.get(row["value"], row["value"]), row["count"], str(row["count"]))
+                    for row in data["summary"]["by_status"]
+                ],
+            ),
+            chart(
+                "Tempo comprovado acumulado por fase",
+                [
+                    (
+                        STATUSES[row["status"]],
+                        row["duration_seconds"],
+                        duration(row["duration_seconds"]),
+                    )
+                    for row in data["summary"]["phase_seconds"]
+                ],
+            ),
+            text(
+                "Tempos corridos; não equivalem a horas trabalhadas. Histórico sem evidência permanece indisponível."
+            ),
             text("Filtros: " + str(filters)),
         ]
+        if financial:
+            from decimal import Decimal
+
+            story.append(
+                text(
+                    "Custo consolidado: R$ "
+                    + number(Decimal(sum(card.get("cost_cents", 0) or 0 for card in cards)) / 100)
+                )
+            )
         for rule in data["filters"] + notes:
             story.append(text(rule))
         story += [

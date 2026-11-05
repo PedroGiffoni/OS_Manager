@@ -147,36 +147,19 @@ def test_report_filter_scope_and_hidden_fields(clients):
         [{"id": "other", "label": "Somente outro fornecedor", "type": "short_text"}],
         {"other": "Outro"},
     )
-    catalogue = supplier.get(P + "/reports/fields")
-    assert catalogue.status_code == 200
-    assert all(
-        value not in catalogue.text
-        for value in [
-            "Segredo interno",
-            "Somente outro fornecedor",
-            "rate_cents",
-            "cost_cents",
-            "Reservado",
-        ]
-    )
-    for field in [
-        "field:private",
-        "field:other",
-        "native:rate_cents",
-        "native:cost_cents",
-        "native:description",
+    for path in [
+        "/reports/fields",
+        "/reports/preview",
+        "/exports/xlsx",
+        "/exports/pdf",
+        "/exports/html",
     ]:
-        for path in ["/reports/preview", "/dashboard", "/exports/xlsx", "/exports/pdf"]:
-            result = filtered(supplier, path, [condition(field, "not_empty")])
-            assert result.status_code == 403, result.text
-            assert "Reservado" not in result.text
-    assert (
-        filtered(supplier, "/reports/preview", [condition("native:id", value=other["id"])]).json()[
-            "total"
-        ]
-        == 0
-    )
-    assert filtered(supplier, "/reports/preview", []).json()["total"] == 1
+        response = supplier.get(P + path)
+        assert response.status_code == 403
+        assert "Reservado" not in response.text and "Outro" not in response.text
+    assert supplier.get(f"{P}/tasks/{other['id']}").status_code == 404
+    payload = supplier.get(f"{P}/tasks/{task['id']}")
+    assert payload.status_code == 200 and "Reservado" not in payload.text
     no_grant = clients["no_grant"].get(P + "/reports/fields")
     assert "cost_cents" not in no_grant.text
 

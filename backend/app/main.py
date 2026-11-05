@@ -1013,14 +1013,15 @@ def export(
     user=Depends(current_user),
     db=Depends(get_db),
 ):
-    if user.role != "supplier":
-        require(user, "export_data")
+    if user.role == "supplier":
+        fail("Relatórios disponíveis apenas para usuários internos.", 403)
+    require(user, "export_data")
     if financial:
         require(user, "export_financial")
         require(user, "view_financial")
         if user.role not in {"admin", "manager"}:
             fail("Exportação financeira restrita.", 403)
-    if format not in {"xlsx", "pdf"}:
+    if format not in {"xlsx", "pdf", "html"}:
         fail("Formato indisponível.", 404)
     from .reporting import records, indicators
     from .exports import build_export
@@ -1044,7 +1045,7 @@ def export(
         "starts": str(starts or ""),
         "ends": str(ends or ""),
     }
-    if analysis:
+    if analysis or format == "html":
         from .analytics import report as operational_report
         from .analytics_exports import build_export as build_operational_export
 

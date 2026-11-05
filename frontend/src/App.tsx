@@ -213,6 +213,7 @@ export default function App() {
   const [hoursError, setHoursError] = useState("");
   const hoursErrorTrigger = useRef<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
+  const [reportReset, setReportReset] = useState(0);
   const [opened, setOpened] = useState<Task | null>(null);
   const [filters, setFilters] = useState({
     sprint_id: "",
@@ -463,12 +464,33 @@ export default function App() {
             <Route
               path="/relatorios"
               element={
-                <Reports
-                  key={filters.sprint_id}
-                  query={params.toString()}
-                  financial={can("export_financial") && can("view_financial")}
-                  run={run}
-                />
+                account.role !== "supplier" ? (
+                  <Reports
+                    key={`${filters.sprint_id}:${reportReset}`}
+                    query={params.toString()}
+                    onCompleteReport={
+                      account.role === "admin"
+                        ? () => {
+                            setFilters({
+                              sprint_id: "",
+                              supplier_id: "",
+                              status: "",
+                              starts: "",
+                              ends: "",
+                            });
+                            setReportReset((value) => value + 1);
+                            setNotice(
+                              "Relatório completo: todos os dados disponíveis, sem filtros de seleção.",
+                            );
+                          }
+                        : undefined
+                    }
+                    financial={can("export_financial") && can("view_financial")}
+                    run={run}
+                  />
+                ) : (
+                  <Empty>Acesso restrito a usuários internos.</Empty>
+                )
               }
             />
             <Route
@@ -712,10 +734,12 @@ function Reports({
   query,
   financial,
   run,
+  onCompleteReport,
 }: {
   query: string;
   financial: boolean;
   run: Run;
+  onCompleteReport?: () => void;
 }) {
   const [conditions, setConditions] = useState<ReportCondition[]>([]);
   const params = new URLSearchParams(query);
@@ -724,6 +748,20 @@ function Reports({
   const reportQuery = params.toString();
   return (
     <>
+      {onCompleteReport && (
+        <section className="panel">
+          <h2>Relatório completo</h2>
+          <p>
+            Inclua todos os cards, fornecedores, sprints e períodos disponíveis.
+            Esta opção limpa os filtros de acompanhamento, de campos do card e
+            da análise. A inclusão de custos continua sendo uma escolha na
+            exportação.
+          </p>
+          <button type="button" onClick={onCompleteReport}>
+            Relatório completo — limpar todos os filtros
+          </button>
+        </section>
+      )}
       <ReportFilters
         sprintId={params.get("sprint_id")}
         onApply={setConditions}

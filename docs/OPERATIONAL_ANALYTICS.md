@@ -24,3 +24,15 @@ Burndown avançado, percentis/previsões e metas institucionais ficam para avali
 ## Validação executada antes da publicação
 
 Em 05/11/2026: pytest 50 testes aprovados (um aviso de depreciação Starlette/httpx); Vitest 5 aprovados; Playwright 8 aprovados com banco temporário; build/typecheck, ESLint e Prettier aprovados. Inclui métricas com relógio controlado, histórico incompleto, reabertura, congelamento de sprint, filtros, escopo e exportações.
+
+## Relatório visual portátil HTML
+
+A exportação HTML usa o mesmo recorte e autorização da análise operacional. Inclui KPIs, gráficos de distribuição e permanência, sprint, backlog, cards e detalhes expansíveis. Marca oficial, tokens, Figtree e Lato seguem a skill Sebrae CE. Logo, fontes, estilos e dados incorporados: abre sem internet, sem CDN ou telemetria. O arquivo é um retrato estático, sem atualização automática.
+
+API: GET /api/v1/exports/html gera análise operacional mesmo sem analysis=true. Na interface, Exportar HTML fica junto a Excel/PDF. Datas pt-BR no fuso configurado e durações legíveis. O PDF analítico também ganhou KPIs, gráficos estáticos e fontes incorporadas.
+
+Motion: entrada e barras em 500 ms, sem repetição contínua. Botão Pausar animações, prefers-reduced-motion e impressão desativam movimento. Não se anima o logo. O documento permanece legível sem JavaScript; o botão de impressão e a alternância manual de motion dependem dele.
+
+Segurança: textos/atributos escapados, sem payload bruto. CSP bloqueia rede, formulários e scripts não autorizados. Script fixo com hash SHA-256; dados de usuário não entram em JavaScript. Exportações de fornecedor continuam sem custos/tarifas e sem tarefas de terceiros. Compartilhar o arquivo somente com pessoas autorizadas.
+
+Decisão aprovada: relatórios são exclusivos de usuários internos. Fornecedores não consultam /reports/* nem exportam Excel, PDF ou HTML, mesmo das próprias atividades. API retorna 403 e a página não aparece no menu.

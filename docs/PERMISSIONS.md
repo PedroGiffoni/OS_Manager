@@ -12,7 +12,7 @@ Papel não concede automaticamente poderes financeiros ao gestor. Administrador 
 | Criar versão de tarifa | admin/manager e change_rates |
 | Ver tarifa/custo | admin/manager e view_financial |
 | Aprovar/rejeitar horas | admin/manager e approve_hours |
-| Exportar operacional | export_data; fornecedor exporta somente seu escopo |
+| Exportar operacional | usuário interno com export_data; fornecedor não consulta nem exporta relatórios |
 | Exportar financeiro | admin/manager, export_data, view_financial e export_financial |
 | Gerenciar concessões/criar usuários | somente administrador; listagens exigem manage_users |
 | Informar horas | somente conta supplier vinculada ao fornecedor atualmente atribuído |
@@ -22,3 +22,4 @@ Papel não concede automaticamente poderes financeiros ao gestor. Administrador 
 Concessões financeiras em um perfil internal não removem as restrições de papel. Editar campos personalizados também exige o perfil em editable_by e visible_to; as regras nativas nunca são configuráveis. Fornecedor não recebe schemas/valores ocultos para seu perfil. Campos de referência são validados no servidor, incluindo anexos pertencentes ao mesmo card.
 
 Revogar concessão afeta a próxima requisição, inclusive de sessão já autenticada. A interface pode exigir recarregamento para atualizar a navegação; o servidor já recusa a operação. Arquivos baixados anteriormente não podem ser revogados retroativamente.
+Fornecedor não acessa /reports/* ou /exports/*, em nenhum formato, nem por URL direta. A navegação oculta Relatórios; o backend retorna 403 inclusive para cards próprios. A visão geral e as tarefas próprias continuam disponíveis.
