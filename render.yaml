@@ -11,7 +11,7 @@ services:
     autoDeployTrigger: "off"
     envVars:
       - key: DATABASE_URL
-        value: sqlite:///./data/os_manager.db
+        sync: false # Render Dashboard: use the internal URL of os-manager-test-db (Ohio).
       - key: CLOUD_DEPLOYMENT
         value: "true"
       - key: COOKIE_SECURE

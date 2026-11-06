@@ -4,11 +4,11 @@
 
 **Publicado e testado:** https://os-manager-phi.vercel.app (frontend) e https://os-manager-api.onrender.com (API). Usuário escolheu My Workspace e aceitou dados fictícios descartáveis no Render Free. Código em https://github.com/PedroGiffoni/OS_Manager. A CLI Vercel autenticada realizou o deploy; 4 E2E passaram no domínio estável. Contas, senha no painel e resultados: DEPLOYMENT_STATUS.md. Este guia descreve como reproduzir a configuração.
 
-## Escolha de armazenamento antes do deploy
+## Armazenamento de teste
 
-O `render.yaml` configura somente um backend **Free**. Não cria banco pago, PostgreSQL ou disco. O SQLite continua em arquivo, sem mudar o modelo aprovado. No Render Free, o filesystem é efêmero: SQLite, anexos e sessões são perdidos em restart, redeploy ou suspensão por inatividade. O serviço suspende após 15 minutos sem tráfego; a retomada pode levar aproximadamente um minuto. O seed opcional recria apenas os exemplos iniciais; NÃO recupera alterações feitas durante o teste.
+O desenvolvimento local continua usando SQLite em `backend/data/os_manager.db`. Para o Render, o usuário autorizou PostgreSQL Free no workspace My Workspace, exclusivamente com dados fictícios de teste. O banco gratuito criado em Ohio expira em **06/12/2026**; ele não tem backups automáticos e o provedor o exclui após o prazo. A aplicação e o banco podem suspender; PostgreSQL mantém os registros enquanto a instância existir, inclusive durante reinícios do backend. Exporte os dados antes do prazo se precisar preservá-los.
 
-Esse caminho serve para uma demonstração descartável, depois de aceitar essa perda. Se os testes precisarem preservar registros, não publique usando esse perfil. Será necessário confirmar outro provedor com disco persistente gratuito ou rever o orçamento/requisito de banco com autorização explícita. Não foi autorizada nem implementada troca para outro SGBD.
+O banco online recebe o seed fictício (contas, fornecedores e tarefas de demonstração), não uma cópia do SQLite local. `OS_MANAGER_DEMO_PASSWORD` permanece como segredo no Render. Não habilite esse seed para produção nem use dados financeiros reais. Este arranjo é apenas para testes; não é arquitetura institucional de produção.
 
 Vercel Hobby restringe uso a projetos pessoais e não comerciais; valide a elegibilidade da demonstração. Este guia não constitui implantação institucional de produção.
 
@@ -32,19 +32,19 @@ Configure os valores abaixo no painel, sem aspas adicionais:
 
 | Variável | Valor |
 | --- | --- |
-| `DATABASE_URL` | `sqlite:///./data/os_manager.db` |
+| `DATABASE_URL` | URL interna do `os-manager-test-db` (PostgreSQL, mesma região Ohio) |
 | `CLOUD_DEPLOYMENT` | `true` |
 | `COOKIE_SECURE` | `true` |
 | `TRUSTED_ORIGINS` | origem HTTPS exata e estável da Vercel, sem barra final |
 | `APP_TIMEZONE` | `America/Sao_Paulo` |
-| `OS_MANAGER_ALLOW_DEMO_SEED` | permanece `false`; mudar para `true` SOMENTE para teste descartável autorizado |
+| `OS_MANAGER_ALLOW_DEMO_SEED` | `true` somente nesta demonstração fictícia autorizada |
 | `OS_MANAGER_DEMO_PASSWORD` | senha privada aleatória com pelo menos 16 caracteres, definida como segredo no painel |
 
 Não configure `PORT` manualmente: a inicialização aceita o valor fornecido pelo Render. O processo aplica Alembic antes de iniciar um único worker Uvicorn. Se o seed estiver explicitamente habilitado, cria contas fictícias somente se não houver usuários. Com o seed desabilitado e banco vazio, não haverá conta para login; para esta demonstração, a inicialização das contas requer o seed autorizado. A senha local conhecida `DemoLocal!2026` é recusada no modo de nuvem.
 
 Contas criadas: `admin`, `gestor`, `gestor_sem_aprovacao`, `interno`, `fornecedor`, `fornecedor2`. Todas recebem a senha privada definida no painel; permissões permanecem as documentadas em PERMISSIONS.md. Não compartilhe a senha administrativa em página pública. Em filesystem efêmero, manter o flag habilitado recria os exemplos depois da perda do arquivo. Desabilitá-lo impede essa recriação e deixa o próximo banco vazio sem contas.
 
-Health check: `/api/v1/health`. Quando o deploy estiver saudável, anote a URL real do backend.
+Health check: `/api/v1/health`. As migrações Alembic rodam antes do seed e da API. A senha privada existente deve permanecer definida no painel e ter pelo menos 16 caracteres.
 
 ## 4. Gerar o proxy e publicar frontend
 
@@ -75,10 +75,10 @@ O navegador chama `https://SEU-FRONTEND.vercel.app/api/v1/...`; a Vercel encamin
 4. Validar cadastro → card → sprint → horas do fornecedor → aprovação do gestor → conclusão → dashboards → downloads Excel/PDF.
 5. Confirmar no navegador cookie Secure/HttpOnly/SameSite, CSRF e `Cache-Control: no-store`; fornecedor não recebe tarifas, custos ou tarefas alheias.
 6. Testar acesso móvel e anexo fictício pequeno; conferir logs de falhas sem credenciais.
-7. No perfil descartável, após aceitar perda dos dados, verificar suspensão/retomada: exemplos voltam, alterações e sessões anteriores não. Não simular restart de um banco que precise preservar.
+7. Confirmar que os dados fictícios continuam após reiniciar somente o backend. O banco PostgreSQL Free permanece disponível até a data de expiração indicada no painel.
 
 Execute novamente os testes locais após qualquer ajuste. Evidência local não substitui a verificação do domínio publicado. Na publicação registrada em DEPLOYMENT_STATUS.md, os endereços foram verificados e os quatro fluxos do navegador passaram. Não foi realizado teste deliberado de suspensão/perda de dados; a limitação está documentada e foi aceita para testes.
 
 ## Atualização, interrupção e dados
 
-Auto deploy do Render está desabilitado no Blueprint para que um commit não reinicie acidentalmente a demonstração. Atualize manualmente quando puder reiniciar os testes. Para encerrar o teste, suspenda/exclua somente os serviços criados para essa demonstração nos painéis; isso não altera o banco local. Não há backup remoto automático neste perfil gratuito. Excel/PDF são relatórios, não backup integral do banco.
+Auto deploy do Render está desabilitado no Blueprint para que um commit não reinicie acidentalmente a demonstração. Atualize manualmente quando puder reiniciar os testes. O SQLite local permanece independente. O PostgreSQL Free não tem backups automáticos e expira em 06/12/2026; faça exportação lógica antes dessa data ou crie outro ambiente. Excel/PDF são relatórios, não backup integral do banco.

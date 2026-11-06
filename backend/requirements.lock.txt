@@ -44,6 +44,8 @@ py-serializable==2.1.0
 pycparser==3.11
 pydantic==2.14.1
 pydantic_core==2.50.1
+psycopg==3.2.10
+psycopg-binary==3.2.10
 Pygments==2.21.0
 pyparsing==3.3.3
 pypdf==6.20.1

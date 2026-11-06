@@ -10,6 +10,7 @@ from sqlalchemy import (
     LargeBinary,
     UniqueConstraint,
     CheckConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base
@@ -69,7 +70,7 @@ class Rate(Base):
 
 class Sprint(Base):
     __tablename__ = "sprints"
-    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), index=True)
     __table_args__ = (CheckConstraint("ends >= starts"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160))
@@ -84,7 +85,7 @@ class Sprint(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
-    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", index=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), index=True)
     __table_args__ = (CheckConstraint("estimated_minutes >= 0 AND used_minutes >= 0"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(240))
