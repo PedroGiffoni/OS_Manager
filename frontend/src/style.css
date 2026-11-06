@@ -801,6 +801,18 @@ table caption {
 .kanban-card:hover {
   box-shadow: var(--shadow-sm);
 }
+.kanban-card-source-dragging {
+  opacity: 0.24;
+}
+.kanban-card-overlay {
+  width: min(100%, 360px);
+  cursor: grabbing;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 20px 45px rgba(12, 32, 57, 0.24);
+  transform: rotate(1deg) scale(1.025);
+  transition: transform 140ms ease, box-shadow 140ms ease;
+}
 .card-top {
   display: flex;
   align-items: center;

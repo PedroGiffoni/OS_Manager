@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   DndContext,
+  DragOverlay,
   pointerWithin,
   closestCorners,
   useDroppable,
@@ -15,6 +16,7 @@ import {
   KeyboardSensor,
   useSensor,
   useSensors,
+  type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
@@ -361,13 +363,13 @@ function DraggableTask({
   suppliers: Supplier[];
   open: (task: Task) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: task.id,
   });
   return (
     <article
       ref={setNodeRef}
-      className="kanban-card"
+      className={"kanban-card" + (isDragging ? " kanban-card-source-dragging" : "")}
       style={{ transform: CSS.Translate.toString(transform) }}
     >
       <div className="card-top">
@@ -443,6 +445,7 @@ export function Board({
     queryKey: ["board", query],
     queryFn: () => api<Task[]>("/tasks?limit=200&" + query),
   });
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
@@ -450,6 +453,7 @@ export function Board({
     }),
   );
   const onDragEnd = (event: DragEndEvent) => {
+    setActiveTask(null);
     const task = rows.data?.find((row) => row.id === event.active.id);
     if (!task || !event.over) return;
     const target = rows.data?.find((row) => row.id === event.over!.id);
@@ -482,6 +486,9 @@ export function Board({
         }),
       );
   };
+  const onDragStart = (event: DragStartEvent) => {
+    setActiveTask(rows.data?.find((row) => row.id === event.active.id) ?? null);
+  };
   return (
     <>
       <div className="section-title">
@@ -506,6 +513,8 @@ export function Board({
             return direct.length ? direct : closestCorners(scoped);
           }}
           onDragEnd={onDragEnd}
+          onDragStart={onDragStart}
+          onDragCancel={() => setActiveTask(null)}
         >
           <div className="kanban">
             {Object.keys(stages).map((status) => (
@@ -538,6 +547,26 @@ export function Board({
               </Column>
             ))}
           </div>
+          <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
+            {activeTask ? (
+              <article className="kanban-card kanban-card-overlay" aria-hidden="true">
+                <div className="card-top"><small>OS-{activeTask.id}</small><GripVertical size={18} aria-hidden="true" /></div>
+                <div className="card-title">{activeTask.title}</div>
+                <small className="card-supplier">
+                  Fornecedor responsável: {suppliers.find((row) => row.id === activeTask.supplier_id)?.name ?? "Não atribuído"}
+                </small>
+                <TaskLabels labels={activeTask.labels} />
+                <p>{activeTask.description.slice(0, 95)}</p>
+                <div>
+                  {activeTask.fields.some((field) => field.native_key === "estimated_minutes") && (
+                    <span className="badge">{activeTask.estimated_minutes / 60}h previstas</span>
+                  )}
+                  {activeTask.approval === "rejected" && <span className="rejection">Corrigir horas</span>}
+                </div>
+                <small>{activeTask.due ? "Prazo " + activeTask.due : "Sem prazo"}</small>
+              </article>
+            ) : null}
+          </DragOverlay>
         </DndContext>
       )}
     </>
