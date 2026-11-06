@@ -1,4 +1,4 @@
-# Backend de TESTES; o plano free não preserva SQLite em reinícios.
+# Backend de TESTES; PostgreSQL Free temporário, exclusivo para dados fictícios.
 # Não contém disco pago, cartão, credenciais ou dados locais.
 services:
   - type: web
@@ -21,6 +21,6 @@ services:
       - key: TRUSTED_ORIGINS
         sync: false
       - key: OS_MANAGER_ALLOW_DEMO_SEED
-        value: "false"
+        sync: false # Enable only for the explicitly authorized fictitious test deployment.
       - key: OS_MANAGER_DEMO_PASSWORD
         sync: false

@@ -1,7 +1,7 @@
 # Limitações e validações pendentes
 
 - Docker Compose foi fornecido, mas não pôde ser executado: o Docker Desktop não disponibilizou `dockerDesktopLinuxEngine`. Validar build, health checks, restart e persistência do volume em máquina com daemon ativo antes de considerar esse caminho homologado.
-- SQLite é temporário. Não houve teste de carga institucional, HA, banco corporativo, SSO ou implantação de produção. Uso local de um processo é o padrão validado.
+- O ambiente local usa SQLite. O Render de teste usa PostgreSQL Free 16 de 1 GB, que expira em 06/12/2026 e não inclui backups automáticos; nenhum teste institucional de carga, HA, SGBD corporativo, SSO ou produção foi realizado.
 - Login usa limitação em memória por origem/conta; reiniciar o processo limpa a janela. Implantação com múltiplos workers exige mecanismo compartilhado e política institucional de autenticação. Não há recuperação automática de senha ou MFA na V1.
 - Sessão local usa cookie sem Secure porque o endereço de desenvolvimento é HTTP. HTTPS, Secure, origens permitidas, gestão de credenciais e política de expiração precisam ser configurados antes de qualquer publicação.
 - Quadros/listas de seleção carregam até 200 atividades e o seletor de fornecedores até 100 por consulta. A lista de atividades possui paginação. Volumes maiores exigem ampliar paginação dos seletores e do quadro.
@@ -15,4 +15,4 @@
 Os testes executados e seus resultados constam em VALIDATION.md. Limitações não são declaração de homologação institucional.
 - A suíte Python emite aviso de depreciação da integração httpx/Starlette TestClient. Os testes passam; uma futura troca para httpx2 deve ser validada separadamente.
 
-- Publicação de testes executada em Vercel/Render; build Docker remoto e quatro E2E no domínio estável passaram. Render Free perde SQLite/anexos/sessões em reinício, redeploy e suspensão; uso descartável foi autorizado. Ver DEPLOYMENT_STATUS.md. Docker local continua sem daemon validado. Health HTTP externo verificado; serviço criado via integração usa health de porta padrão do Render.
+- Publicação de testes executada em Vercel/Render; quatro E2E passaram antes da troca do banco. PostgreSQL foi conectado e inicializado no Render; deploy e health foram verificados, mas o E2E ainda não foi repetido no banco novo. Ver DEPLOYMENT_STATUS.md. Docker local continua sem daemon validado.
