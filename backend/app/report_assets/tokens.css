@@ -1,9 +1,8 @@
-/* Tokens oficiais da skill Sebrae CE. Blocos CSS puros, sem dependência de Tailwind. */
+/* Tokens CSS do relatório, aproximados da paleta usada no HTML do Farol Estratégico. */
 :root {
-  /* === SEBRAE Design Tokens === */
-  /* Marca oficial Sebrae — Pantone 2935 C / HEX #2A4FDA */
+  /* === Cores e superfícies do relatório === */
 
-  /* Primary palette (immutable brand) */
+  /* Cores principais usadas no Farol. */
   --sebrae-blue: 228 70% 51%; /* SEBRAE Blue #2A4FDA */
   --sebrae-orange: 228 70% 51%; /* alias mantido — usa azul institucional */
 

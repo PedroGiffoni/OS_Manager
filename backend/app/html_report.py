@@ -10,6 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from .report_filters import STATUSES, APPROVALS
 from .settings import APP_TIMEZONE
+from .report_layout import executive, event_label
 
 ASSETS = Path(__file__).parent / "report_assets"
 
@@ -84,36 +85,26 @@ def bars(rows, label, value, formatter=str):
 
 SCRIPT = """document.getElementById('print').addEventListener('click',()=>window.print());
 const motion=document.getElementById('motion');
-motion.addEventListener('click',()=>{const stopped=document.body.classList.toggle('paused');motion.setAttribute('aria-pressed',String(stopped));motion.textContent=stopped?'Ativar animações':'Pausar animações';});"""
+motion.addEventListener('click',()=>{const stopped=document.body.classList.toggle('paused');motion.setAttribute('aria-pressed',String(stopped));motion.textContent=stopped?'Ativar animações':'Pausar animações';});
+document.getElementById('expand').addEventListener('click',()=>document.querySelectorAll('.card-detail').forEach(el=>el.open=true));
+document.getElementById('collapse').addEventListener('click',()=>document.querySelectorAll('.card-detail').forEach(el=>el.open=false));
+let closed=[];window.addEventListener('beforeprint',()=>{closed=[...document.querySelectorAll('.card-detail:not([open])')];closed.forEach(el=>el.open=true);});window.addEventListener('afterprint',()=>closed.forEach(el=>el.open=false));"""
 
 
 def build_html(data, financial, filters):
     cards = data["items"]
     summary = data["summary"]
-    done = sum(card["status"] == "done" for card in cards)
-    completion = f"{number(Decimal(done) * 100 / len(cards))}%" if cards else "Sem dados"
-    logo = b64encode((ASSETS / "sebrae-cor.svg").read_bytes()).decode()
+    logo = b64encode((ASSETS / "sebrae-white.svg").read_bytes()).decode()
     fonts = "".join(
-        f"@font-face{{font-family:{family};src:url(data:font/woff2;base64,{b64encode((ASSETS / file).read_bytes()).decode()}) format('woff2');font-weight:100 900;font-display:swap}}"
-        for family, file in [("Figtree", "figtree.woff2"), ("Lato", "lato.woff2")]
+        f"@font-face{{font-family:{family};src:url(data:font/woff2;base64,{b64encode((ASSETS / file).read_bytes()).decode()}) format('woff2');font-weight:{weight};font-display:swap}}"
+        for family, file, weight in [
+            ("Figtree", "figtree.woff2", 400),
+            ("Figtree", "figtree-bold.woff2", 700),
+            ("Lato", "lato.woff2", 400),
+        ]
     )
     css = (ASSETS / "tokens.css").read_text(encoding="utf-8") + (ASSETS / "report.css").read_text(
         encoding="utf-8"
-    )
-    overview = (
-        metric("Cards no recorte", len(cards), "Escopo autorizado e filtrado")
-        + metric("Conclusão", completion, f"{done} cards concluídos")
-        + metric("Em atraso", summary["overdue"], "Cards abertos com prazo vencido")
-        + metric("Aguardando aprovação", summary["waiting_approval"], "Submissões atuais pendentes")
-    )
-    if financial:
-        overview += metric(
-            "Custo consolidado",
-            "R$ " + number(Decimal(sum(c.get("cost_cents", 0) or 0 for c in cards)) / 100),
-            "Somente horas aprovadas · tarifa congelada",
-        )
-    status_chart = bars(
-        summary["by_status"], lambda r: STATUSES.get(r["value"], r["value"]), lambda r: r["count"]
     )
     phases = bars(
         summary["phase_seconds"],
@@ -134,7 +125,7 @@ def build_html(data, financial, filters):
             + metric(
                 "Iniciais concluídos",
                 sprint["initial_done"],
-                ("Cumprimento: " + str(percent) + "%")
+                ("Cumprimento: " + number(percent) + "%")
                 if percent is not None
                 else "Percentual indisponível",
             )
@@ -178,7 +169,7 @@ def build_html(data, financial, filters):
             [
                 stamp(t["at"]),
                 t["actor"],
-                t["action"],
+                event_label(t["action"]),
                 STATUSES.get(t["origin"], "—"),
                 STATUSES.get(t["destination"], "—"),
                 t["reason"],
@@ -279,7 +270,7 @@ def build_html(data, financial, filters):
         "idle_days": "Sem alteração (dias)",
     }
     applied = [
-        f"{filter_labels.get(k, k)}: {v}"
+        f"{filter_labels.get(k, k)}: {datetime.fromisoformat(str(v)).strftime('%d/%m/%Y') if k in {'starts', 'ends'} else STATUSES.get(str(v), APPROVALS.get(str(v), v))}"
         for k, v in filters.items()
         if k != "campos" and v not in (None, "", False)
     ] + data["filters"]
@@ -301,5 +292,67 @@ def build_html(data, financial, filters):
     ]
     backlog = summary["backlog"]
     script_hash = b64encode(sha256(SCRIPT.encode()).digest()).decode()
-    html = f"""<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'sha256-{script_hash}'; base-uri 'none'; form-action 'none'"><title>Relatório · Gestão de Demandas</title><style>{fonts}{css}</style></head><body><a class="skip" href="#conteudo">Ir para o relatório</a><header><img src="data:image/svg+xml;base64,{logo}" width="100" height="64" alt="Sebrae"><div><p class="eyebrow">SEBRAE CEARÁ · GESTÃO DE DEMANDAS</p><p>Inteligência operacional</p></div></header><nav aria-label="Seções do relatório"><a href="#resumo">Resumo</a><a href="#sprints">Sprints</a><a href="#backlog">Backlog</a><a href="#cards">Cards</a><button id="motion" aria-pressed="false">Pausar animações</button><button id="print">Imprimir relatório</button></nav><main id="conteudo"><section id="resumo"><p class="eyebrow">RELATÓRIO EXECUTIVO E OPERACIONAL</p><h1>Entregas em perspectiva</h1><p class="lead">Do panorama da operação ao histórico de cada demanda.</p><p>Gerado em {e(stamp(data["as_of"]))} · Fuso de apresentação: {e(APP_TIMEZONE)} · Retrato estático, sem atualização automática.</p><ul class="chips" aria-label="Filtros aplicados">{chips}</ul><div class="metrics">{overview}</div><div class="grid"><article class="panel"><h2>Distribuição das demandas</h2><p>Quantidade de cards por etapa no recorte.</p>{status_chart}</article><article class="panel"><h2>Onde o fluxo permanece</h2><p>Soma dos tempos comprovados em cada fase; concluído é terminal.</p>{phases}</article></div><aside class="notice">Permanência é tempo corrido, incluindo noites e fins de semana. Não representa horas trabalhadas ou faturáveis. {summary["complete_histories"]} de {len(cards)} cards têm histórico completo. Sem evidência, a duração é indisponível.</aside></section><section id="sprints"><h2>Ritmo das sprints</h2><p>Compromisso inicial, mudanças de escopo e entregas, considerando somente o recorte autorizado.</p>{sprint_cards}</section><section id="backlog"><h2>Saúde do backlog</h2><div class="metrics">{metric("No backlog", backlog["count"])}{metric("Sem fornecedor", backlog["unassigned"])}{metric("Em atraso", backlog["overdue"])}{metric("Sem alteração observada", backlog["idle"], str(backlog["idle_days"]) + " dias ou mais")}</div><article class="panel"><h3>Cards mais antigos do backlog</h3>{table(["Card", "Título", "Idade", "Fase atual"], [[f"OS-{c["id"]}", c["title"], duration(c["age_seconds"]), duration(c["current_phase_seconds"])] for c in data["backlog_oldest"]], "Até dez itens mais antigos")}</article></section><section id="cards"><h2>Explore as demandas</h2><p>Abra cada card para consultar fases, decisões de horas e eventos.</p>{table(["ID", "Atividade", "Etapa", "Fornecedor", "Na fase atual", "Até primeira conclusão"] + (["Custo consolidado"] if financial else []), card_rows, "Cards do recorte")}{details or '<p class="empty">Nenhum card encontrado para os filtros selecionados.</p>'}</section><section class="panel"><h2>Como ler os indicadores</h2><ul><li>Conclusão = cards concluídos ÷ cards no recorte × 100. Base zero: sem dados.</li><li>Lead time: criação até a primeira conclusão, quando comprovado pelo histórico.</li><li>Reaberturas preservam ciclos separados. Fases encerradas de sprint respeitam seu corte histórico.</li><li>{e(data["period_basis"])}</li><li>{e(summary["recorded_flow"]["basis"])}</li><li>Dados e campos respeitam as permissões de quem gerou este arquivo. Compartilhe somente com pessoas autorizadas.</li></ul></section></main><footer><strong>Gestão de Demandas · Sebrae Ceará</strong><p>Relatório portátil · Dados observados até {e(stamp(data["as_of"]))}</p></footer><script>{SCRIPT}</script></body></html>"""
+    reading = executive(data, financial)
+    synthesis = "".join(
+        f'<div class="tone-{tone}"><small>{e(title)}</small><p>{e(body)}</p></div>'
+        for title, body, tone in reading["synthesis"]
+    )
+    kpis = "".join(
+        f'<article class="kpi tone-{tone}"><p class="kpi-label">{e(label)}</p><strong>{e(value)}</strong><p class="kpi-note">{e(note)}</p></article>'
+        for label, value, note, tone in reading["kpis"]
+    )
+    offset = Decimal(0)
+    slices = ""
+    legend = ""
+    for state, label in STATUSES.items():
+        count = sum(c["status"] == state for c in cards)
+        pct = Decimal(count) * 100 / len(cards) if cards else Decimal(0)
+        slices += (
+            f'<circle class="slice state-{state}" cx="80" cy="80" r="55" pathLength="100" stroke-dasharray="{pct} {100 - pct}" stroke-dashoffset="{-offset}" />'
+            if pct
+            else ""
+        )
+        offset += pct
+        legend += f'<li><span><i class="state-{state}" aria-hidden="true"></i>{e(label)}</span><strong>{count}</strong></li>'
+    donut = f'<div class="donut-layout"><div class="donut"><svg viewBox="0 0 160 160" role="img" aria-label="Distribuição por etapa; valores na legenda"><circle class="donut-track" cx="80" cy="80" r="55"/>{slices}</svg><div><strong>{len(cards)}</strong><small>cards no recorte</small></div></div><ul class="legend">{legend}</ul></div>'
+    effort = bars(
+        [{"name": label, "minutes": minutes} for label, minutes in reading["hours"]],
+        lambda r: r["name"],
+        lambda r: r["minutes"],
+        lambda v: number(Decimal(v) / 60) + "h",
+    )
+    insights = "".join(
+        f'<article class="insight tone-{tone}"><small>{e(label)}</small><strong>{e(content)}</strong></article>'
+        for label, content, tone in [
+            ("PRAZOS", str(summary["overdue"]) + " cards abertos com prazo vencido.", "error"),
+            (
+                "RETRABALHO",
+                str(summary["reopened"]) + " cards com reabertura registrada.",
+                "warning",
+            ),
+            (
+                "QUALIDADE DO HISTÓRICO",
+                str(len(cards) - summary["complete_histories"])
+                + " cards com informações históricas parciais.",
+                "primary",
+            ),
+        ]
+    )
+    html = f"""<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'; script-src 'sha256-{script_hash}'; base-uri 'none'; form-action 'none'">
+<title>Relatório gerencial · Gestão de Demandas</title><style>{fonts}{css}</style></head>
+<body><a class="skip" href="#conteudo">Ir para o relatório</a>
+<header class="report-header"><img src="data:image/svg+xml;base64,{logo}" width="82" height="54" alt="Sebrae"><div class="header-title"><strong>Gestão de Demandas</strong><span>Relatório gerencial · Sebrae Ceará</span></div><div class="header-actions"><button id="motion" aria-pressed="false">Pausar animações</button><button id="print">Imprimir relatório</button></div></header>
+<div class="report-shell"><nav class="report-nav" aria-label="Seções do relatório"><small>DECIDIR</small><a href="#resumo">01 · Panorama</a><small>GERIR</small><a href="#sprints">02 · Sprints</a><a href="#backlog">03 · Backlog</a><small>DETALHAR</small><a href="#cards">04 · Cards e históricos</a><a href="#metodo">05 · Critérios de leitura</a><div class="nav-foot">RETRATO EXPORTADO<br><strong>{e(stamp(data["as_of"]))}</strong><br>{e(APP_TIMEZONE)}</div></nav>
+<main id="conteudo"><div class="report-context"><span><b>{len(cards)}</b> cards no recorte autorizado</span><ul class="chips" aria-label="Filtros aplicados">{chips}</ul></div>
+<section id="resumo"><div class="section-head"><div><p class="eyebrow">01 / PANORAMA DA OPERAÇÃO</p><h1>Entregas em perspectiva</h1><p>Execução das demandas, pontos de atenção e evidências do fluxo.</p></div><span class="edition">Leitura: <b>Gestão</b> · {e(stamp(data["as_of"]))}</span></div>
+<div class="synthesis">{synthesis}</div><div class="kpis">{kpis}</div>
+<div class="grid g75"><article class="panel"><p class="eyebrow">DISTRIBUIÇÃO DA CARTEIRA</p><h2>Em que etapa estão as demandas?</h2><p>Quantidade de cards no recorte, sem metas ou avaliações individuais.</p>{donut}</article><div class="insight-stack"><p class="eyebrow">SINAIS DESTA FOTOGRAFIA</p>{insights}</div></div>
+<div class="grid"><article class="panel"><p class="eyebrow">TEMPO DO FLUXO</p><h2>Onde o trabalho permanece</h2><p>Soma das permanências comprovadas por fase.</p>{phases}<p class="chart-note">Tempo corrido, incluindo noites e fins de semana. Não equivale a esforço apontado. Concluído é terminal.</p></article><article class="panel"><p class="eyebrow">ESFORÇO REGISTRADO</p><h2>Planejamento e realização</h2><p>Totais de horas previstas, utilizadas e aprovadas.</p>{effort}<p class="chart-note">Estimativas ausentes não entram no planejamento. Horas utilizadas ainda não aprovadas não integram o custo consolidado.</p></article></div></section>
+<section id="sprints"><div class="section-head"><div><p class="eyebrow">02 / RITMO DAS ENTREGAS</p><h2>Ritmo das sprints</h2><p>Compromisso inicial, entradas posteriores e resultado no recorte.</p></div></div><div class="sprint-grid">{sprint_cards}</div></section>
+<section id="backlog"><div class="section-head"><div><p class="eyebrow">03 / TRABALHO A PLANEJAR</p><h2>Saúde do backlog</h2><p>Volume, responsabilidades e envelhecimento da fila.</p></div></div><div class="metrics">{metric("No backlog", backlog["count"])}{metric("Sem fornecedor", backlog["unassigned"])}{metric("Em atraso", backlog["overdue"])}{metric("Sem alteração observada", backlog["idle"], str(backlog["idle_days"]) + " dias ou mais")}</div><article class="panel"><h3>Mais antigos primeiro</h3>{table(["Card", "Título", "Idade do registro", "Na fase atual"], [[f"OS-{c["id"]}", c["title"], duration(c["age_seconds"]), duration(c["current_phase_seconds"])] for c in data["backlog_oldest"]], "Até dez itens mais antigos do backlog")}</article></section>
+<section id="cards"><div class="section-head"><div><p class="eyebrow">04 / RASTREABILIDADE</p><h2>Explore as demandas</h2><p>Da lista consolidada ao histórico individual de fases e aprovações.</p></div><div class="actions"><button id="expand">Expandir cards</button><button id="collapse">Recolher cards</button></div></div><article class="panel">{table(["ID", "Atividade", "Etapa", "Fornecedor", "Na fase atual", "Até primeira conclusão"] + (["Custo consolidado"] if financial else []), card_rows, "Cards do recorte")}</article>{details or '<p class="empty">Nenhum card encontrado para os filtros selecionados.</p>'}</section>
+<section id="metodo" class="panel methodology"><p class="eyebrow">05 / TRANSPARÊNCIA DOS INDICADORES</p><h2>Como ler este relatório</h2><div class="method-grid"><div><h3>Conclusão e prazo</h3><p>Conclusão = concluídas ÷ cards no recorte × 100. Sem base, não há percentual. Cards sem prazo não são classificados em atraso.</p></div><div><h3>Tempo e evidência</h3><p>Lead time vai da criação à primeira conclusão. Reaberturas preservam ciclos. {summary["complete_histories"]} de {len(cards)} históricos completos; sem evidência, duração indisponível.</p></div><div><h3>Escopo temporal</h3><p>{e(data["period_basis"])} {e(summary["recorded_flow"]["basis"])}</p></div><div><h3>Permissões e compartilhamento</h3><p>Retrato estático gerado com as permissões do emissor. Não atualiza automaticamente. Compartilhe somente com pessoas autorizadas.</p></div></div></section>
+<footer><strong>Gestão de Demandas · Sebrae Ceará</strong><span>Dados observados até {e(stamp(data["as_of"]))} · {e(APP_TIMEZONE)}</span></footer></main></div><script>{SCRIPT}</script></body></html>"""
     return BytesIO(html.encode("utf-8")), "text/html"

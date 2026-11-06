@@ -358,3 +358,18 @@ def test_supplier_cannot_consult_or_export_reports(clients):
             assert "Teste de aceite" not in response.text
     assert clients["supplier"].get(f"{P}/tasks/{own['id']}").status_code == 200
     assert clients["supplier"].get(f"{P}/tasks/{other['id']}").status_code == 404
+
+
+def test_editorial_exports_empty_cohort_and_print_sections(clients):
+    html = clients["admin"].get(P + "/exports/html")
+    assert html.status_code == 200
+    assert "Sem base" in html.text and "Nenhum card encontrado" in html.text
+    assert "Expandir cards" in html.text and "Recolher cards" in html.text
+    assert "report-nav" in html.text and "synthesis" in html.text
+    pdf = clients["admin"].get(P + "/exports/pdf?analysis=true")
+    assert pdf.status_code == 200
+    reader = PdfReader(BytesIO(pdf.content))
+    text = " ".join(page.extract_text() for page in reader.pages)
+    assert "Sem base" in text and "Nenhum registro neste recorte." in text
+    assert "Custo consolidado" not in text
+    assert all("Gestão de Demandas /" in page.extract_text() for page in reader.pages)
