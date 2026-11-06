@@ -54,7 +54,8 @@ def add_comment(identity: int, data: CommentInput, user=Depends(current_user), d
         fail("Reabra a atividade antes de adicionar comentário.", 409)
     row = Comment(task_id=identity, body=data.body, author_id=user.id)
     db.add(row)
-    audit(db, user, "task", identity, "comment_added")
+    db.flush()
+    audit(db, user, "task", identity, "comment_added", comment_id=row.id, body=row.body)
     db.commit()
     return {"id": row.id}
 
@@ -118,7 +119,18 @@ async def add_attachment(
         author_id=user.id,
     )
     db.add(row)
-    audit(db, user, "task", identity, "attachment_added")
+    db.flush()
+    audit(
+        db,
+        user,
+        "task",
+        identity,
+        "attachment_added",
+        attachment_id=row.id,
+        name=row.name,
+        size=row.size,
+        sha256=row.sha256,
+    )
     db.commit()
     return {"id": row.id}
 

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session as ORMSession
 from sqlalchemy.orm.exc import StaleDataError
 from argon2.exceptions import VerificationError, InvalidHashError
 from .db import get_db
+from .audit_trail import changes, field_changes, visible_details
 from .models import (
     User,
     Role,
@@ -503,6 +504,7 @@ def create_task(data: TaskCreate, user=Depends(current_user), db=Depends(get_db)
     row = Task(
         title=data.title,
         description=data.description,
+        labels=[label.model_dump() for label in data.labels or []],
         due=data.due.isoformat() if data.due else None,
         priority=data.priority,
         creator_id=user.id,
@@ -534,7 +536,17 @@ def create_task(data: TaskCreate, user=Depends(current_user), db=Depends(get_db)
             )
         )
     audit(
-        db, user, "task", row.id, "created", estimate_policy=data.estimate_policy, status="backlog"
+        db,
+        user,
+        "task",
+        row.id,
+        "created",
+        estimate_policy=data.estimate_policy,
+        status="backlog",
+        initial={
+            key: getattr(row, key)
+            for key in ["title", "description", "labels", "due", "priority", "supplier_id"]
+        },
     )
     db.commit()
     return task_payload(db, user, row)
@@ -547,14 +559,28 @@ def update_task(identity: int, data: TaskEdit, user=Depends(current_user), db=De
     version(row, data.version)
     if row.status == "done":
         fail("Reabra a atividade antes de editar.", 409)
+    before = {
+        key: getattr(row, key)
+        for key in ["title", "description", "labels", "priority", "due", "supplier_id"]
+    }
     set_supplier(db, user, row, data.supplier_id)
     row.title, row.description, row.priority = (
         data.title,
         data.description,
         data.priority,
     )
+    if data.labels is not None:
+        row.labels = [label.model_dump() for label in data.labels]
     row.due = data.due.isoformat() if data.due else None
-    audit(db, user, "task", row.id, "edited")
+    audit(
+        db,
+        user,
+        "task",
+        row.id,
+        "edited",
+        changes=changes(before, {key: getattr(row, key) for key in before}),
+        task_version=row.version + 1,
+    )
     row.version += 1
     db.commit()
     return task_payload(db, user, row)
@@ -587,6 +613,9 @@ def put_hours(identity: int, data: HoursInput, user=Depends(current_user), db=De
         fail("Horas positivas são obrigatórias nesta etapa.")
     if row.status in {"backlog", "todo"} and data.used_minutes:
         fail("Horas utilizadas são informadas durante produção ou revisão.")
+    before = {"estimated_minutes": row.estimated_minutes, "used_minutes": row.used_minutes}
+    previous_hours_version = row.hours_version
+    previous_approval = row.approval
     row.estimated_minutes, row.used_minutes = data.estimated_minutes, data.used_minutes
     row.hours_version += 1
     row.approval = "resubmitted" if row.approval == "rejected" else "pending"
@@ -599,7 +628,23 @@ def put_hours(identity: int, data: HoursInput, user=Depends(current_user), db=De
             author_id=user.id,
         )
     )
-    audit(db, user, "task", row.id, "hours_submitted", hours_version=row.hours_version)
+    audit(
+        db,
+        user,
+        "task",
+        row.id,
+        "hours_submitted",
+        hours_version=row.hours_version,
+        previous_hours_version=previous_hours_version,
+        operation="filled" if not previous_hours_version else "edited",
+        estimated_minutes=row.estimated_minutes,
+        used_minutes=row.used_minutes,
+        previous_approval=previous_approval,
+        approval=row.approval,
+        changes=changes(
+            before, {"estimated_minutes": row.estimated_minutes, "used_minutes": row.used_minutes}
+        ),
+    )
     db.commit()
     return task_payload(db, user, row)
 
@@ -709,7 +754,15 @@ def update_schema(identity: int, data: CardSchema, user=Depends(current_user), d
         )
     )
     row.version += 1
-    audit(db, user, "task", identity, "schema_versioned")
+    audit(
+        db,
+        user,
+        "task",
+        identity,
+        "schema_versioned",
+        schema_version=(previous.version + 1 if previous else 1),
+        changes=field_changes(previous, fields, values),
+    )
     db.commit()
     return task_payload(db, user, row)
 
@@ -742,7 +795,15 @@ def update_values(identity: int, data: FieldValues, user=Depends(current_user), 
         )
     )
     row.version += 1
-    audit(db, user, "task", identity, "values_versioned")
+    audit(
+        db,
+        user,
+        "task",
+        identity,
+        "values_versioned",
+        schema_version=previous.version + 1,
+        changes=field_changes(previous, previous.fields, values),
+    )
     db.commit()
     return task_payload(db, user, row)
 
@@ -866,6 +927,7 @@ def sprint_action(
                 "priority": task.priority,
                 "title": task.title,
                 "description": task.description,
+                "labels": task.labels or [],
                 "due": task.due,
                 "completed_at": completed_at,
                 "schema_version_id": schema.id if schema else None,
@@ -928,17 +990,18 @@ def audit_history(entity: str, identity: int, user=Depends(current_user), db=Dep
         select(Audit).where(Audit.entity == entity, Audit.entity_id == identity).order_by(Audit.id)
     )
     financial = user.role in {"admin", "manager"} and allowed(user, "view_financial")
+    users = {actor.id: actor.username for actor in db.scalars(select(User))}
+    schema = current_schema(db, db.get(Task, identity)) if entity == "task" else None
+    fields = {field["id"]: field for field in schema.fields} if schema else {}
     return [
         {
             "id": row.id,
             "actor_id": row.actor_id,
+            "actor_name": row.details.get("actor_name")
+            or users.get(row.actor_id, f"Usuário #{row.actor_id}"),
             "action": row.action,
             "created_at": row.created_at,
-            "details": {
-                key: value
-                for key, value in row.details.items()
-                if financial or "cost" not in key and "rate" not in key
-            },
+            "details": visible_details(row.details, user, financial, fields),
         }
         for row in entries
     ]
@@ -1180,9 +1243,18 @@ def reorder(items: list[ReorderItem], user=Depends(current_user), db=Depends(get
     positions = sorted(row.priority for row in rows)
     base = positions[0]
     for index, row in enumerate(rows):
+        previous_priority = row.priority
         row.priority = base + index
         row.version += 1
-        audit(db, user, "task", row.id, "reordered", priority=row.priority)
+        audit(
+            db,
+            user,
+            "task",
+            row.id,
+            "reordered",
+            priority=row.priority,
+            previous_priority=previous_priority,
+        )
     db.commit()
     return {"ok": True}
 

@@ -24,6 +24,7 @@ def fail(message, status=422, code="BUSINESS_RULE"):
 
 
 def audit(db, actor, entity, identity, action, *, timestamp=None, **details):
+    details["actor_name"] = actor.username
     db.add(
         Audit(
             actor_id=actor.id,
@@ -103,8 +104,17 @@ def set_supplier(db, user, task, identity):
                 rate_cents=rate.cents,
             )
         )
+    old_supplier = task.supplier_id
     task.supplier_id = identity
-    audit(db, user, "task", task.id, "assignment_changed", supplier_id=identity)
+    audit(
+        db,
+        user,
+        "task",
+        task.id,
+        "assignment_changed",
+        supplier_id=identity,
+        previous_supplier_id=old_supplier,
+    )
 
 
 def cost_cents(db, task, sprint_id=None):
@@ -134,6 +144,7 @@ def task_payload(db, user, task):
             "id",
             "title",
             "description",
+            "labels",
             "status",
             "priority",
             "due",
@@ -254,9 +265,18 @@ def move_task(db, user, task, data):
         fail("Sem autorização para mover esta atividade.", 403)
     origin = task.status
     if data.status == origin:
+        previous_priority = task.priority
         task.priority = data.priority
         task.version += 1
-        audit(db, user, "task", task.id, "reordered", priority=data.priority)
+        audit(
+            db,
+            user,
+            "task",
+            task.id,
+            "reordered",
+            priority=data.priority,
+            previous_priority=previous_priority,
+        )
         return
     if origin == "done":
         if not manager or data.status != "review" or not data.reason:

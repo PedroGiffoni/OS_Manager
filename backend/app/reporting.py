@@ -68,6 +68,7 @@ def records(
                 "supplier_id",
                 "title",
                 "description",
+                "labels",
                 "due",
                 "completed_at",
             ]:

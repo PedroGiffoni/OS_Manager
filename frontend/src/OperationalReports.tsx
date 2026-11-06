@@ -10,7 +10,24 @@ import {
   X,
   ArrowRight,
   TriangleAlert,
+  CheckCircle2,
+  CalendarDays,
+  CircleDot,
+  ListChecks,
+  PencilLine,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { api, download } from "./api";
 import { stages, approvals, money, formatTimestamp, type Field } from "./types";
 import { Label, Empty, type Run } from "./App";
@@ -149,6 +166,18 @@ interface Report {
       basis: string;
     };
   };
+  overview: {
+    status_counts: { status: string; count: number }[];
+    priority_counts: { priority: number; count: number }[];
+    label_counts: { text: string; color: string; count: number }[];
+    recent_activity: (Event & { card_id: number; card_title: string })[];
+    upcoming: { id: number; title: string; status: string; due: string; supplier_name: string | null }[];
+    unscheduled: { id: number; title: string; status: string; supplier_name: string | null }[];
+    daily_activity: { date: string; created: number; updated: number; completed: number }[];
+    created_7d: number;
+    updated_7d: number;
+    completed_7d: number;
+  };
 }
 const eventNames: Record<string, string> = {
   created: "Card criado",
@@ -217,6 +246,141 @@ function Stat({
       <strong>{value}</strong>
       {hint && <small>{hint}</small>}
     </article>
+  );
+}
+const statusColors: Record<string, string> = {
+  backlog: "#758195",
+  todo: "#4f7de8",
+  production: "#1367b1",
+  review: "#e3a329",
+  done: "#399467",
+};
+const actionLabels: Record<string, string> = {
+  created: "criou o card",
+  edited: "atualizou os dados",
+  status_changed: "moveu o card",
+  included_in_sprint: "incluiu em uma sprint",
+  returned_to_backlog: "devolveu ao backlog",
+  reopened: "reabriu o card",
+  hours_submitted: "enviou horas",
+  hours_decided: "avaliou as horas",
+  schema_versioned: "alterou os campos do card",
+  values_versioned: "atualizou campos",
+  reordered: "alterou a prioridade",
+  supplier_changed: "alterou o fornecedor",
+  comment_added: "comentou no card",
+  attachment_added: "adicionou um anexo",
+};
+function displayDate(value: string) {
+  return new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
+function ReportOverview({
+  data,
+  onSelect,
+}: {
+  data: Report;
+  onSelect: (id: number) => void;
+}) {
+  const overview = data.overview;
+  const total = data.total;
+  const statusData = overview.status_counts.map((item) => ({
+    ...item,
+    name: stages[item.status] ?? item.status,
+  }));
+  const priorityData = overview.priority_counts.map((item) => ({
+    name: `Prioridade ${item.priority}`,
+    count: item.count,
+  }));
+  return (
+    <div className="report-overview" aria-label="Resumo dos cards filtrados">
+      <div className="overview-heading">
+        <div>
+          <span className="eyebrow">Painel de operações</span>
+          <h2>Resumo dos cards</h2>
+          <p>Indicadores e movimentações do recorte atual, alimentados pelos dados da aplicação.</p>
+        </div>
+        <span className="overview-count">{num(total)} card(s) no recorte</span>
+      </div>
+      <div className="overview-kpis">
+        <article><CheckCircle2 /><strong>{num(overview.completed_7d)}</strong><span>Concluídos nos últimos 7 dias</span></article>
+        <article><PencilLine /><strong>{num(overview.updated_7d)}</strong><span>Atualizações registradas em 7 dias</span></article>
+        <article><ListChecks /><strong>{num(overview.created_7d)}</strong><span>Cards criados em 7 dias</span></article>
+        <article><CalendarDays /><strong>{num(overview.upcoming.length)}</strong><span>Entregas nos próximos 7 dias</span></article>
+      </div>
+      <div className="overview-grid">
+        <section className="overview-panel">
+          <header><div><h3>Visão geral do status</h3><p>Distribuição de todos os cards filtrados por etapa.</p></div></header>
+          {total ? (
+            <div className="overview-donut-layout">
+              <div className="overview-chart overview-donut">
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={statusData} dataKey="count" nameKey="name" innerRadius={68} outerRadius={94} paddingAngle={2}>
+                      {statusData.map((item) => <Cell key={item.status} fill={statusColors[item.status] ?? "#8893a4"} />)}
+                    </Pie>
+                    <Tooltip formatter={(value) => [`${value} card(s)`, "Quantidade"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div aria-hidden="true"><strong>{num(total)}</strong><span>Total de cards</span></div>
+              </div>
+              <ul className="overview-legend">
+                {statusData.map((item) => <li key={item.status}><span><i style={{ background: statusColors[item.status] }} />{item.name}</span><strong>{item.count}</strong></li>)}
+              </ul>
+            </div>
+          ) : <Empty>Nenhum card para os filtros selecionados.</Empty>}
+        </section>
+        <section className="overview-panel">
+          <header><div><h3>Atividade recente</h3><p>Últimas alterações registradas nos cards filtrados.</p></div></header>
+          {overview.recent_activity.length ? (
+            <ol className="overview-activity">
+              {overview.recent_activity.map((event) => (
+                <li key={`${event.id}-${event.card_id}`}>
+                  <span className="activity-dot" />
+                  <div><p><strong>{event.actor}</strong> {actionLabels[event.action] ?? "atualizou o card"} <button className="link" onClick={() => onSelect(event.card_id)}>{event.card_title}</button></p><small>{timestamp(event.at)}</small></div>
+                </li>
+              ))}
+            </ol>
+          ) : <Empty>Não há atividade registrada para este recorte.</Empty>}
+        </section>
+        <section className="overview-panel">
+          <header><div><h3>Prioridades</h3><p>Quantidade de cards em cada nível configurado.</p></div></header>
+          {priorityData.length ? (
+            <div className="overview-chart overview-bar">
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={priorityData} margin={{ top: 8, right: 12, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value) => [`${value} card(s)`, "Quantidade"]} />
+                  <Bar dataKey="count" name="Cards" fill="#3264b6" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <Empty>Sem prioridades no recorte.</Empty>}
+        </section>
+        <section className="overview-panel">
+          <header><div><h3>Etiquetas dos cards</h3><p>Distribuição por etiqueta configurada; a aplicação não possui tipo de trabalho nativo.</p></div></header>
+          {overview.label_counts.length ? (
+            <ul className="overview-labels">
+              {overview.label_counts.slice(0, 10).map((label) => <li key={label.text}><span><i style={{ backgroundColor: /^#[0-9a-f]{6}$/i.test(label.color) ? label.color : "#2B4EDA" }} />{label.text}</span><strong>{label.count}</strong></li>)}
+            </ul>
+          ) : <Empty>Os cards deste recorte ainda não têm etiquetas.</Empty>}
+        </section>
+        <section className="overview-panel overview-calendar">
+          <header><div><h3>Próximas entregas</h3><p>Cards abertos com prazo nos próximos sete dias.</p></div><CalendarDays size={20} aria-hidden="true" /></header>
+          {overview.upcoming.length ? <ul className="overview-task-list">{overview.upcoming.map((card) => <li key={card.id}><time>{displayDate(card.due)}</time><div><button className="link" onClick={() => onSelect(card.id)}>{card.title}</button><small>{stages[card.status]} · {card.supplier_name ?? "Sem fornecedor"}</small></div></li>)}</ul> : <Empty>Nenhuma entrega próxima com esses filtros.</Empty>}
+        </section>
+        <section className="overview-panel overview-calendar">
+          <header><div><h3>Trabalho sem agendamento</h3><p>Cards do backlog sem prazo definido.</p></div><ListTodo size={20} aria-hidden="true" /></header>
+          {overview.unscheduled.length ? <ul className="overview-task-list">{overview.unscheduled.map((card) => <li key={card.id}><span className="unscheduled-marker">—</span><div><button className="link" onClick={() => onSelect(card.id)}>{card.title}</button><small>{card.supplier_name ?? "Sem fornecedor"}</small></div></li>)}</ul> : <Empty>Nenhum card sem prazo no backlog.</Empty>}
+        </section>
+      </div>
+      <p className="overview-footnote">Os indicadores de atividade usam eventos auditados em UTC nos últimos sete dias. O gráfico de categorias usa etiquetas, que são informais e distintas de um tipo nativo.</p>
+    </div>
   );
 }
 function CardAnalysis({
@@ -594,6 +758,7 @@ export function OperationalReports({
   });
   const data = response.data;
   const sections = [
+    { key: "overview", label: "Resumo", icon: CircleDot },
     { key: "cards", label: "Cards", icon: Clock3 },
     { key: "sprints", label: "Sprints", icon: CalendarRange },
     { key: "backlog", label: "Backlog", icon: ListTodo },
@@ -749,6 +914,9 @@ export function OperationalReports({
               role="tabpanel"
               aria-labelledby={"analysis-tab-" + section}
             >
+              {section === "overview" && (
+                <ReportOverview data={data} onSelect={setSelected} />
+              )}
               {section === "cards" && (
                 <>
                   <h2>Prévia do relatório de cards</h2>

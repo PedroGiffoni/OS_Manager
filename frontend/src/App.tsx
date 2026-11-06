@@ -435,7 +435,12 @@ export default function App() {
             <Route
               path="/kanban"
               element={
-                <Board query={params.toString()} run={run} open={setOpened} />
+                <Board
+                  query={params.toString()}
+                  suppliers={suppliers.data ?? []}
+                  run={run}
+                  open={setOpened}
+                />
               }
             />
             <Route

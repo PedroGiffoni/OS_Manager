@@ -902,3 +902,111 @@ test("administrador limpa todos os filtros para emitir relatório completo", asy
     expect(params.has(field)).toBe(false);
   }
 });
+
+test("fornecedor recebe confirmação e pode editar horas salvas", async ({
+  browser,
+}) => {
+  const adminContext = await browser.newContext();
+  const supplierContext = await browser.newContext();
+  const admin = await adminContext.newPage();
+  const supplier = await supplierContext.newPage();
+  await login(admin, "admin");
+  const me = await (await admin.request.get("/api/v1/auth/me")).json();
+  const title = "Confirmação de horas " + Date.now();
+  const task = await (
+    await admin.request.post("/api/v1/tasks", {
+      headers: { "X-CSRF-Token": me.csrf },
+      data: { title, supplier_id: 1 },
+    })
+  ).json();
+  let current = task;
+  for (const status of ["todo", "production"]) {
+    const moved = await admin.request.post(`/api/v1/tasks/${task.id}/move`, {
+      headers: { "X-CSRF-Token": me.csrf },
+      data: { version: current.version, status },
+    });
+    expect(moved.ok()).toBe(true);
+    current = await moved.json();
+  }
+  await login(supplier, "fornecedor");
+  await supplier
+    .getByRole("link", { name: "Minhas tarefas", exact: true })
+    .click();
+  await supplier.getByRole("button", { name: new RegExp(title) }).click();
+  const input = supplier.getByLabel("Horas utilizadas (total)", {
+    exact: true,
+  });
+  await input.fill("12");
+  await supplier.route(`**/api/v1/tasks/${task.id}/hours`, (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({
+        detail: { message: "Falha de gravação para teste." },
+      }),
+    }),
+  );
+  await supplier
+    .getByRole("button", { name: "Salvar / reapresentar horas", exact: true })
+    .click();
+  await expect(
+    supplier.getByText("Falha de gravação para teste.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    supplier.getByText("✓ Horas salvas", { exact: true }),
+  ).toHaveCount(0);
+  await expect(input).toHaveValue("12");
+  await supplier.unroute(`**/api/v1/tasks/${task.id}/hours`);
+  await supplier
+    .getByRole("button", { name: "Salvar / reapresentar horas", exact: true })
+    .click();
+  await expect(
+    supplier.getByText("✓ Horas salvas", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    supplier.getByRole("button", { name: "Editar horas", exact: true }),
+  ).toBeEnabled();
+  await expect(input).toHaveAttribute("readonly", "");
+  await expect(input).toHaveValue("12");
+  await supplier
+    .getByRole("button", { name: "Editar horas", exact: true })
+    .click();
+  await expect(input).toBeFocused();
+  await expect(input).not.toHaveAttribute("readonly", "");
+  await input.fill("10");
+  await supplier
+    .getByRole("button", { name: "Salvar / reapresentar horas", exact: true })
+    .click();
+  await expect(
+    supplier.getByText("✓ Horas salvas", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    supplier.getByRole("button", { name: "Editar horas", exact: true }),
+  ).toBeEnabled();
+  expect(
+    (await (await supplier.request.get(`/api/v1/tasks/${task.id}`)).json())
+      .used_minutes,
+  ).toBe(600);
+  await admin.getByRole("link", { name: "Backlog", exact: true }).click();
+  await admin.getByRole("button", { name: new RegExp(title) }).click();
+  await admin.getByRole("button", { name: "Histórico", exact: true }).click();
+  await expect(
+    admin.getByRole("heading", { name: "Histórico de versões", exact: true }),
+  ).toBeVisible();
+  await expect(
+    admin.getByText("Horas editadas / reapresentadas", { exact: true }),
+  ).toBeVisible();
+  const comparison = admin
+    .getByRole("table", { name: /Comparação da alteração/ })
+    .last();
+  await expect(comparison).toContainText("Horas utilizadas");
+  await expect(comparison).toContainText("12h 0min");
+  await expect(comparison).toContainText("10h 0min");
+  await expect(admin.locator(".timeline")).toContainText("fornecedor");
+  await admin.screenshot({
+    path: "test-results/historico-horas.png",
+    fullPage: true,
+  });
+  await adminContext.close();
+  await supplierContext.close();
+});

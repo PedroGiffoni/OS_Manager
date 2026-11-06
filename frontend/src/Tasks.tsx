@@ -1,6 +1,7 @@
-import { formatTimestamp, hourInput } from "./types";
+import { HistoryTimeline } from "./HistoryTimeline";
+import { hourInput } from "./types";
 import { GripVertical, X } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -32,6 +33,7 @@ import {
   decimalToUnits,
   type Account,
   type Task,
+  type TaskLabel,
   type Supplier,
 } from "./types";
 import { Label, Empty, type Run } from "./App";
@@ -182,6 +184,8 @@ function TaskForm({
   submit: (values: any) => Promise<void>;
 }) {
   const [estimatePolicy, setEstimatePolicy] = useState("absent");
+  const [labels, setLabels] = useState<TaskLabel[]>(task?.labels ?? []);
+  useEffect(() => setLabels(task?.labels ?? []), [task?.id, task?.version]);
   const {
     register,
     handleSubmit,
@@ -204,6 +208,7 @@ function TaskForm({
           ...values,
           supplier_id: values.supplier_id ? Number(values.supplier_id) : null,
           due: values.due || null,
+          labels,
           ...(task
             ? { version: task.version }
             : { estimate_policy: estimatePolicy }),
@@ -231,6 +236,67 @@ function TaskForm({
       <Label title="Descrição">
         <textarea {...register("description")} />
       </Label>
+      <fieldset className="label-builder">
+        <legend>Etiquetas do card</legend>
+        {labels.map((label, index) => (
+          <div className="label-editor-row" key={index}>
+            <Label title={`Texto da etiqueta ${index + 1}`}>
+              <input
+                maxLength={40}
+                value={label.text}
+                onChange={(event) =>
+                  setLabels((current) =>
+                    current.map((item, itemIndex) =>
+                      itemIndex === index
+                        ? { ...item, text: event.target.value }
+                        : item,
+                    ),
+                  )
+                }
+              />
+            </Label>
+            <Label title="Cor da etiqueta">
+              <input
+                type="color"
+                value={label.color}
+                onChange={(event) =>
+                  setLabels((current) =>
+                    current.map((item, itemIndex) =>
+                      itemIndex === index
+                        ? { ...item, color: event.target.value }
+                        : item,
+                    ),
+                  )
+                }
+              />
+            </Label>
+            <button
+              type="button"
+              className="label-remove"
+              aria-label={`Remover etiqueta ${label.text || index + 1}`}
+              onClick={() =>
+                setLabels((current) => current.filter((_, i) => i !== index))
+              }
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="label-add"
+          disabled={labels.length >= 8}
+          onClick={() =>
+            setLabels((current) => [
+              ...current,
+              { text: "", color: "#2B4EDA" },
+            ])
+          }
+        >
+          + Adicionar etiqueta
+        </button>
+        <small>Até 8 etiquetas por card. Escolha o texto e a cor.</small>
+      </fieldset>
       <div className="form-grid">
         <Label title="Fornecedor responsável">
           <select {...register("supplier_id")}>
@@ -251,17 +317,48 @@ function TaskForm({
           <input type="number" {...register("priority")} />
         </Label>
       </div>
-      <button className="primary" disabled={isSubmitting}>
+      <button
+        className="primary"
+        disabled={isSubmitting || labels.some((label) => !label.text.trim())}
+      >
         Salvar atividade
       </button>
     </form>
   );
 }
+function tagForeground(color: string) {
+  const safeColor = /^#[0-9a-f]{6}$/i.test(color) ? color : "#2B4EDA";
+  const rgb = [1, 3, 5].map((offset) =>
+    parseInt(safeColor.slice(offset, offset + 2), 16) / 255,
+  );
+  const channels = rgb.map((channel) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+  );
+  const luminance =
+    0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  return { backgroundColor: safeColor, color: luminance > 0.42 ? "#14213D" : "#FFFFFF" };
+}
+
+function TaskLabels({ labels }: { labels?: TaskLabel[] }) {
+  if (!labels?.length) return null;
+  return (
+    <div className="task-labels" aria-label="Etiquetas do card">
+      {labels.map((label, index) => (
+        <span key={index} style={tagForeground(label.color)}>
+          {label.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function DraggableTask({
   task,
+  suppliers,
   open,
 }: {
   task: Task;
+  suppliers: Supplier[];
   open: (task: Task) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform } = useSortable({
@@ -286,6 +383,10 @@ function DraggableTask({
       <button className="card-title" onClick={() => open(task)}>
         {task.title}
       </button>
+      <small className="card-supplier">
+        Fornecedor responsável: {suppliers.find((row) => row.id === task.supplier_id)?.name ?? "Não atribuído"}
+      </small>
+      <TaskLabels labels={task.labels} />
       <p>{task.description.slice(0, 95)}</p>
       <div>
         {task.fields.some(
@@ -329,10 +430,12 @@ function Column({
 }
 export function Board({
   query,
+  suppliers = [],
   run,
   open,
 }: {
   query: string;
+  suppliers?: Supplier[];
   run: Run;
   open: (task: Task) => void;
 }) {
@@ -423,7 +526,12 @@ export function Board({
                     {rows.data
                       .filter((task) => task.status === status)
                       .map((task) => (
-                        <DraggableTask key={task.id} task={task} open={open} />
+                        <DraggableTask
+                          key={task.id}
+                          task={task}
+                          suppliers={suppliers}
+                          open={open}
+                        />
                       ))}
                   </SortableContext>
                 }
@@ -534,13 +642,14 @@ export function TaskDetail({
         {tab === "schema" ? (
           <FieldBuilder key={task.version} task={task} run={run} />
         ) : tab === "history" ? (
-          <History identity={identity} />
+          <HistoryTimeline identity={identity} />
         ) : (
           <>
             <span className={"badge " + task.status}>
               {stages[task.status]}
             </span>
             <p>{task.description}</p>
+            <TaskLabels labels={task.labels} />
             <p className={task.approval === "rejected" ? "rejection" : "muted"}>
               {approvals[task.approval]}{" "}
               {task.approval_reason && "— " + task.approval_reason}
@@ -590,7 +699,7 @@ export function TaskDetail({
                   ["estimated_minutes", "used_minutes"].includes(
                     field.native_key ?? "",
                   ),
-              ) && <HoursForm key={task.version} task={task} run={run} />}
+              ) && <HoursForm key={task.id} task={task} run={run} />}
             <p className="formula">
               Horas previstas seguem a configuração individual do card. Horas
               utilizadas são exigidas para revisão. Conclusão exige gestor e
@@ -698,56 +807,73 @@ export function TaskDetail({
 }
 function HoursForm({ task, run }: { task: Task; run: Run }) {
   const [used, setUsed] = useState(hourInput(task.used_minutes));
+  const [editing, setEditing] = useState(task.used_minutes === 0);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const locked = task.status === "done" || task.approval === "approved";
+  useEffect(() => {
+    if (!editing) setUsed(hourInput(task.used_minutes));
+  }, [task.used_minutes, editing]);
   return (
     <form
       className="inline-form"
       onSubmit={(event) => {
         event.preventDefault();
-        run(() =>
-          api(`/tasks/${task.id}/hours`, "PUT", {
-            version: task.version,
-            estimated_minutes: task.estimated_minutes,
-            used_minutes: decimalToUnits(used, 60),
-          }),
-        );
+        if (!editing || locked || saving) return;
+        setSaving(true);
+        setSaved(false);
+        run(async () => {
+          try {
+            await api(`/tasks/${task.id}/hours`, "PUT", {
+              version: task.version,
+              estimated_minutes: task.estimated_minutes,
+              used_minutes: decimalToUnits(used, 60),
+            });
+            setEditing(false);
+            setSaved(true);
+          } finally {
+            setSaving(false);
+          }
+        });
       }}
     >
       <h3>Apontamento do fornecedor</h3>
       <div className="form-grid">
         <Label title="Horas utilizadas (total)">
           <input
+            ref={input}
             inputMode="decimal"
             value={used}
+            readOnly={!editing || locked}
+            disabled={saving}
             onChange={(event) => setUsed(event.target.value)}
           />
         </Label>
       </div>
-      <button
-        className="primary"
-        disabled={task.status === "done" || task.approval === "approved"}
-      >
-        Salvar / reapresentar horas
-      </button>
+      <div className="actions">
+        {editing ? (
+          <button className="primary" disabled={locked || saving}>
+            {saving ? "Salvando…" : "Salvar / reapresentar horas"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={locked || saving}
+            onClick={(event) => {
+              event.preventDefault();
+              setSaved(false);
+              setEditing(true);
+              input.current?.focus();
+            }}
+          >
+            Editar horas
+          </button>
+        )}
+        <small className="hours-saved" role="status" aria-live="polite">
+          {saved ? "✓ Horas salvas" : ""}
+        </small>
+      </div>
     </form>
-  );
-}
-function History({ identity }: { identity: number }) {
-  const data = useQuery({
-    queryKey: ["history", identity],
-    queryFn: () => api<any[]>(`/audit?entity=task&identity=${identity}`),
-  });
-  return (
-    <ol className="timeline">
-      {data.data?.map((row) => (
-        <li key={row.id}>
-          <strong>{row.action}</strong>
-          <small>
-            {formatTimestamp(row.created_at)} · usuário {row.actor_id}
-          </small>
-          <pre>{JSON.stringify(row.details, null, 2)}</pre>
-        </li>
-      ))}
-      {data.isError && <p>{data.error.message}</p>}
-    </ol>
   );
 }

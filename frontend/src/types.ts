@@ -24,10 +24,15 @@ export interface Field {
   visible_to: string[];
   editable_by: string[];
 }
+export interface TaskLabel {
+  text: string;
+  color: string;
+}
 export interface Task {
   id: number;
   title: string;
   description: string;
+  labels?: TaskLabel[];
   status: string;
   priority: number;
   due: string | null;

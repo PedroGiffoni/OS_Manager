@@ -278,6 +278,7 @@ def profile(row, events, hours, approvals, reference, actors, closure=None):
         "id": row["id"],
         "title": row["title"],
         "status": row["status"],
+        "labels": row.get("labels", []),
         "supplier_id": row["supplier_id"],
         "sprint_id": row["sprint_id"],
         "priority": row["priority"],
@@ -630,12 +631,81 @@ def report(db, user, criteria, *, idle_days=7, reference=None):
         "returned": sum(event["action"] == "returned_to_backlog" for event in events),
         "basis": "Eventos na janela UTC informada, somente dos cards selecionados pela criação; não é um censo geral de todos os eventos.",
     }
+    # In-app overview: aggregate the full filtered result before the API paginates
+    # the detailed card table. This keeps charts and KPI totals consistent.
+    status_counts = [
+        {"status": status, "count": sum(card["status"] == status for card in cards)}
+        for status in STATUSES
+    ]
+    priority_counts = [
+        {"priority": value, "count": sum(card["priority"] == value for card in cards)}
+        for value in sorted({card["priority"] for card in cards})
+    ]
+    label_groups = {}
+    for card in cards:
+        for label in card.get("labels", []):
+            key = str(label.get("text", "")).strip().casefold()
+            if not key:
+                continue
+            group = label_groups.setdefault(
+                key, {"text": label["text"], "color": label.get("color", "#2B4EDA"), "count": 0}
+            )
+            group["count"] += 1
+    recent_activity = sorted(
+        [
+            {**event, "card_id": card["id"], "card_title": card["title"]}
+            for card in cards
+            for event in card["timeline"]
+        ],
+        key=lambda event: (instant(event["at"]), event["id"]),
+        reverse=True,
+    )[:12]
+    today = reference.date()
+    seven_days_ago = today - timedelta(days=6)
+    upcoming = sorted(
+        [
+            card for card in cards
+            if card["status"] != "done"
+            and card.get("due")
+            and today <= datetime.fromisoformat(card["due"]).date() <= today + timedelta(days=7)
+        ],
+        key=lambda card: (card["due"], card["id"]),
+    )[:10]
+    unscheduled = sorted(
+        [card for card in cards if card["status"] == "backlog" and not card.get("due")],
+        key=lambda card: (card["created_at"], card["id"]),
+    )[:10]
+    daily_activity = []
+    for offset in range(7):
+        day = seven_days_ago + timedelta(days=offset)
+        day_events = [event for card in cards for event in card["timeline"] if instant(event["at"]).date() == day]
+        daily_activity.append(
+            {
+                "date": day.isoformat(),
+                "created": sum(event["action"] == "created" for event in day_events),
+                "updated": sum(event["action"] != "created" for event in day_events),
+                "completed": sum(event["destination"] == "done" for event in day_events),
+            }
+        )
+    overview = {
+        "status_counts": status_counts,
+        "priority_counts": priority_counts,
+        "label_counts": sorted(label_groups.values(), key=lambda group: (-group["count"], group["text"].casefold())),
+        "recent_activity": recent_activity,
+        "upcoming": upcoming,
+        "unscheduled": unscheduled,
+        "daily_activity": daily_activity,
+        "created_7d": sum(day["created"] for day in daily_activity),
+        "updated_7d": sum(day["updated"] for day in daily_activity),
+        "completed_7d": sum(day["completed"] for day in daily_activity),
+    }
     return {
         "as_of": reference.isoformat(),
         "filters": filter_summary(*context),
         "period_basis": "Período seleciona a criação UTC das atividades. Tempos abrangem o histórico até o instante observado; sprint encerrada usa o encerramento.",
         "total": len(cards),
         "summary": totals,
+        "overview": overview,
         "sprints": sprint_summaries(
             db, user, {card["id"] for card in cards}, criteria, reference, context
         ),

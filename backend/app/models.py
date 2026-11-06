@@ -90,6 +90,7 @@ class Task(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(String(240))
     description: Mapped[str] = mapped_column(Text, default="")
+    labels: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     status: Mapped[str] = mapped_column(String, default="backlog", index=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)
     due: Mapped[str | None] = mapped_column(String, nullable=True)

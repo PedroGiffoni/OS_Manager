@@ -1,6 +1,6 @@
 from typing import Literal
 from datetime import date
-from pydantic import BaseModel, Field, ConfigDict, StrictInt
+from pydantic import BaseModel, Field, ConfigDict, StrictInt, model_validator
 
 
 class Input(BaseModel):
@@ -35,12 +35,25 @@ class Version(Input):
     version: StrictInt = Field(gt=0)
 
 
+class TaskLabel(Input):
+    text: str = Field(min_length=1, max_length=40)
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
 class TaskInput(Input):
     title: str = Field(min_length=1, max_length=240)
     description: str = Field(default="", max_length=10000)
     supplier_id: StrictInt | None = None
     due: date | None = None
     priority: StrictInt = 0
+    labels: list[TaskLabel] | None = Field(default=None, max_length=8)
+
+    @model_validator(mode="after")
+    def unique_label_texts(self):
+        texts = [label.text.casefold() for label in self.labels or []]
+        if len(texts) != len(set(texts)):
+            raise ValueError("As etiquetas precisam ter textos diferentes.")
+        return self
 
 
 class TaskCreate(TaskInput):
