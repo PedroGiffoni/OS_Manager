@@ -13,6 +13,7 @@ from .models import (
     Approval,
     User,
     Attachment,
+    KanbanColumn,
 )
 from .security import allowed, supplier_for
 
@@ -148,6 +149,7 @@ def task_payload(db, user, task):
             "status",
             "priority",
             "due",
+            "planned_start",
             "supplier_id",
             "sprint_id",
             "estimated_minutes",
@@ -158,6 +160,8 @@ def task_payload(db, user, task):
             "created_at",
         )
     }
+    status_column = db.get(KanbanColumn, task.status)
+    result["status_title"] = status_column.title if status_column else task.status
     decision = db.scalar(
         select(Approval).where(Approval.task_id == task.id).order_by(Approval.id.desc())
     )
@@ -255,7 +259,9 @@ def estimate_required(db, task, status):
 
 def move_task(db, user, task, data):
     version(task, data.version)
-    if data.status not in STATUSES:
+    columns = list(db.scalars(select(KanbanColumn).order_by(KanbanColumn.workflow_order)))
+    statuses = [column.key for column in columns] or STATUSES
+    if data.status not in statuses:
         fail("Etapa inválida.")
     manager = user.role in {"admin", "manager"}
     supplier = supplier_for(db, user)
@@ -264,6 +270,8 @@ def move_task(db, user, task, data):
     ):
         fail("Sem autorização para mover esta atividade.", 403)
     origin = task.status
+    if not manager and (origin not in STATUSES or data.status not in STATUSES):
+        fail("Somente gestor pode mover atividades em colunas adicionais.", 403)
     if data.status == origin:
         previous_priority = task.priority
         task.priority = data.priority
@@ -293,9 +301,30 @@ def move_task(db, user, task, data):
         )
         task.approval = "pending"
         task.hours_version += 1
+        task.board_origin_status = None
     else:
-        if STATUSES.index(data.status) != STATUSES.index(origin) + 1:
-            fail("Retornos e saltos de etapa não estão autorizados nesta versão.")
+        if origin in STATUSES and data.status in STATUSES:
+            if STATUSES.index(data.status) != STATUSES.index(origin) + 1:
+                fail("Retornos e saltos de etapa não estão autorizados nesta versão.")
+        elif origin in STATUSES and data.status not in STATUSES:
+            if not manager:
+                fail("Somente gestor pode mover atividades para colunas adicionais.", 403)
+            if origin == "review" and task.approval != "approved":
+                fail("Aguarde a aprovação ou corrija as horas antes de avançar.")
+            task.board_origin_status = origin
+        elif origin not in STATUSES and data.status not in STATUSES:
+            if not manager:
+                fail("Somente gestor pode reorganizar atividades em colunas adicionais.", 403)
+        elif origin not in STATUSES and data.status in STATUSES:
+            base_status = task.board_origin_status
+            if not base_status or base_status not in STATUSES:
+                fail("Etapa original da atividade adicional não foi encontrada.", 409)
+            allowed_destinations = {base_status}
+            if base_status != "done" and STATUSES.index(base_status) < len(STATUSES) - 1:
+                allowed_destinations.add(STATUSES[STATUSES.index(base_status) + 1])
+            if data.status not in allowed_destinations:
+                fail("Retorne à etapa de origem ou avance somente para a próxima etapa do fluxo.")
+            task.board_origin_status = None
         if estimate_required(db, task, data.status) and task.estimated_minutes <= 0:
             fail("Preencha as horas previstas para mover esta atividade para Em produção.")
         if data.status == "review" and task.used_minutes <= 0:

@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
-from .models import Sprint, SprintTask, Audit, SchemaVersion
+from .models import Sprint, SprintTask, Audit, SchemaVersion, KanbanColumn
 from .repositories import filtered_tasks
 from .security import allowed
 from .services import task_payload, cost_cents
@@ -107,6 +107,7 @@ def records(
 
 
 def indicators(db, rows):
+    status_titles = {column.key: column.title for column in db.scalars(select(KanbanColumn))}
     done = sum(row["status"] == "done" for row in rows)
     with_due = [row for row in rows if row["status"] == "done" and row["due"]]
     on_time = 0
@@ -149,8 +150,9 @@ def indicators(db, rows):
         "on_time_percent": percent(on_time, len(with_due)),
         "completed_with_due": len(with_due),
         "by_status": [
-            {"status": status, "count": sum(row["status"] == status for row in rows)}
+            {"status": status, "label": status_titles.get(status, status), "count": sum(row["status"] == status for row in rows)}
             for status in ["backlog", "todo", "production", "review", "done"]
+            + sorted({row["status"] for row in rows} - {"backlog", "todo", "production", "review", "done"})
         ],
     }
     result["deviation_minutes"] = result["used_minutes"] - result["estimated_minutes"]

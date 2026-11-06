@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
-from .models import Attachment, Supplier, Sprint, User
+from .models import Attachment, Supplier, Sprint, User, KanbanColumn
 from .security import allowed
 from .services import fail
 
@@ -16,6 +16,10 @@ STATUSES = {
     "review": "Em revisão",
     "done": "Concluído",
 }
+
+
+def status_label(value):
+    return STATUSES.get(value, value)
 APPROVALS = {
     "pending": "Aguardando aprovação",
     "approved": "Aprovado",
@@ -157,8 +161,9 @@ def catalogue(db, user, rows):
         kind = item["type"]
         key = item["key"]
         if key == "native:status":
+            status_options = list(db.scalars(select(KanbanColumn).order_by(KanbanColumn.view_order)))
             item["options"] = [
-                {"value": value, "label": label} for value, label in STATUSES.items()
+                {"value": column.key, "label": column.title} for column in status_options
             ]
         elif key == "native:approval":
             item["options"] = [

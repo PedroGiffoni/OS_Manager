@@ -108,7 +108,7 @@ def build_html(data, financial, filters):
     )
     phases = bars(
         summary["phase_seconds"],
-        lambda r: STATUSES[r["status"]],
+        lambda r: STATUSES.get(r["status"], r["status"]),
         lambda r: r["duration_seconds"],
         duration,
     )
@@ -157,7 +157,7 @@ def build_html(data, financial, filters):
         )
         detail_rows = [
             [
-                STATUSES[p["status"]],
+                STATUSES.get(p["status"], p["status"]),
                 stamp(p["entered_at"]),
                 stamp(p["exited_at"]) if p["exited_at"] else "Em aberto",
                 duration(p["duration_seconds"]),
@@ -193,7 +193,7 @@ def build_html(data, financial, filters):
             for f in card["fields"]
             if f.get("id") in card["values"]
         ]
-        details += f'<details class="panel card-detail"><summary>OS-{card["id"]} · {e(card["title"])}</summary><div class="detail-body"><p>{e(STATUSES[card["status"]])} · {e(card["supplier_name"] or "Sem fornecedor")} · Observado até {e(stamp(card["as_of"]))}</p>'
+        details += f'<details class="panel card-detail"><summary>OS-{card["id"]} · {e(card["title"])}</summary><div class="detail-body"><p>{e(STATUSES.get(card["status"], card["status"]))} · {e(card["supplier_name"] or "Sem fornecedor")} · Observado até {e(stamp(card["as_of"]))}</p>'
         if not card["history_complete"]:
             details += (
                 '<aside class="notice">Histórico parcial: '
@@ -282,7 +282,7 @@ def build_html(data, financial, filters):
         [
             f"OS-{c['id']}",
             c["title"],
-            STATUSES[c["status"]],
+            STATUSES.get(c["status"], c["status"]),
             c["supplier_name"] or "Não atribuído",
             duration(c["current_phase_seconds"]),
             duration(c["lead_time_seconds"]),

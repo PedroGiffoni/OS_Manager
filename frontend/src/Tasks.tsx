@@ -1,6 +1,6 @@
 import { HistoryTimeline } from "./HistoryTimeline";
 import { hourInput } from "./types";
-import { GripVertical, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -37,10 +37,12 @@ import {
   type Task,
   type TaskLabel,
   type Supplier,
+  type Sprint,
 } from "./types";
 import { Label, Empty, type Run } from "./App";
 import { FieldBuilder, FieldValueForm } from "./Fields";
 import { Collaboration } from "./Collaboration";
+import { ProjectTable, TimelineView, ViewTools, filterBoardTasks, type ProjectColumn, type SavedProjectView, type ViewLayout } from "./ProjectViews";
 export function TaskList({
   query,
   suppliers,
@@ -130,7 +132,7 @@ export function TaskList({
                     </td>
                     <td>
                       <span className={"badge " + task.status}>
-                        {stages[task.status]}
+                        {stages[task.status] ?? task.status_title ?? task.status}
                       </span>
                     </td>
                     <td>
@@ -408,23 +410,55 @@ function DraggableTask({
 }
 function Column({
   status,
+  title,
   children,
   count,
+  summary,
+  canManage,
+  isFirst,
+  isLast,
+  onRename,
+  onDelete,
+  onMove,
+  onDragStart,
+  onDrop,
+  editing,
+  onEdit,
 }: {
   status: string;
+  title: string;
   children: React.ReactNode;
   count: number;
+  summary: string;
+  canManage: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onRename: (title: string) => void;
+  onDelete: () => void;
+  onMove: (delta: number) => void;
+  onDragStart: () => void;
+  onDrop: () => void;
+  editing: boolean;
+  onEdit: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
+  const [draft, setDraft] = useState(title);
+  useEffect(() => setDraft(title), [title]);
   return (
     <section
       ref={setNodeRef}
       className={"kanban-column " + (isOver ? "over" : "")}
     >
-      <h3>
+      <h3 draggable={canManage} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", status); onDragStart(); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onDrop(); }}>
         <i className={status} />
-        {stages[status]}
+        {editing ? <input aria-label="Título da coluna" autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onRename(draft)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setDraft(title); event.currentTarget.blur(); } }} /> : <button className="kanban-column-title" onClick={() => canManage && onEdit()}>{title}</button>}
         <span>{count}</span>
+        {summary && <small className="kanban-column-sum">{summary}</small>}
+        {canManage && <div className="kanban-column-tools">
+          <button aria-label={`Mover ${title} para a esquerda`} disabled={isFirst} onClick={() => onMove(-1)}><ArrowLeft size={14} aria-hidden="true" /></button>
+          <button aria-label={`Mover ${title} para a direita`} disabled={isLast} onClick={() => onMove(1)}><ArrowRight size={14} aria-hidden="true" /></button>
+          {status.startsWith("custom_") && <><button aria-label={`Editar ${title}`} onClick={onEdit}>✎</button><button aria-label={`Excluir ${title}`} onClick={onDelete}><Trash2 size={13} aria-hidden="true" /></button></>}
+        </div>}
       </h3>
       {children}
     </section>
@@ -433,11 +467,15 @@ function Column({
 export function Board({
   query,
   suppliers = [],
+  sprints = [],
+  account,
   run,
   open,
 }: {
   query: string;
   suppliers?: Supplier[];
+  sprints?: Sprint[];
+  account: Account;
   run: Run;
   open: (task: Task) => void;
 }) {
@@ -445,6 +483,24 @@ export function Board({
     queryKey: ["board", query],
     queryFn: () => api<Task[]>("/tasks?limit=200&" + query),
   });
+  const columnQuery = useQuery({ queryKey: ["board-columns"], queryFn: () => api<ProjectColumn[]>("/board/columns") });
+  const viewQuery = useQuery({ queryKey: ["board-views"], queryFn: () => api<SavedProjectView[]>("/board/views") });
+  const defaults: ProjectColumn[] = Object.entries(stages).map(([key, title], view_order) => ({ key, title, is_system: true, view_order }));
+  const columns = [...(columnQuery.data?.length ? columnQuery.data : defaults)].sort((a, b) => a.view_order - b.view_order);
+  const [activeViewId, setActiveViewId] = useState<number | null>(null);
+  const [layout, setLayout] = useState<ViewLayout>("board");
+  const [filterQuery, setFilterQuery] = useState("");
+  const [groupBy, setGroupBy] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [zoom, setZoom] = useState<"month" | "quarter" | "year">("quarter");
+  const [sliceBy, setSliceBy] = useState("");
+  const [sliceValue, setSliceValue] = useState("");
+  const [sumBy, setSumBy] = useState("");
+  const [descending, setDescending] = useState(false);
+  const [visibleFields, setVisibleFields] = useState<string[]>([]);
+  const [editingColumn, setEditingColumn] = useState<string | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
+  const canManage = account.role === "admin" || account.role === "manager";
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -489,6 +545,91 @@ export function Board({
   const onDragStart = (event: DragStartEvent) => {
     setActiveTask(rows.data?.find((row) => row.id === event.active.id) ?? null);
   };
+  const selectView = (view: SavedProjectView | null) => {
+    setActiveViewId(view?.id ?? null);
+    const config = view?.config ?? {};
+    setLayout(view?.layout ?? "board");
+    setFilterQuery(String(config.query ?? ""));
+    setGroupBy(String(config.groupBy ?? ""));
+    setSortBy(String(config.sortBy ?? ""));
+    setZoom(config.zoom === "month" || config.zoom === "year" ? config.zoom : "quarter");
+    setSliceBy(String(config.sliceBy ?? ""));
+    setSliceValue(String(config.sliceValue ?? ""));
+    setSumBy(config.sumBy === "cost_cents" && !(account.role !== "supplier" && account.permissions.includes("view_financial")) ? "" : String(config.sumBy ?? ""));
+    setDescending(Boolean(config.descending));
+    setVisibleFields(Array.isArray(config.visibleFields) ? config.visibleFields : []);
+    if (!view) { setSliceBy(""); setSliceValue(""); setSumBy(""); setDescending(false); }
+  };
+  const viewConfig = () => ({ query: filterQuery, groupBy, sortBy, zoom, visibleFields, sliceBy, sliceValue, sumBy, descending });
+  const saveView = (name?: string) => run(async () => {
+    if (!name && activeViewId === null) return;
+    if (name) {
+      const view = await api<SavedProjectView>("/board/views", "POST", { name, layout, config: viewConfig(), position: viewQuery.data?.length ?? 0 });
+      setActiveViewId(view.id);
+    } else {
+      await api(`/board/views/${activeViewId}`, "PUT", { name: viewQuery.data?.find((view) => view.id === activeViewId)?.name ?? "Visualização", layout, config: viewConfig(), position: viewQuery.data?.find((view) => view.id === activeViewId)?.position ?? 0 });
+    }
+  });
+  const duplicateView = () => run(async () => {
+    const current = viewQuery.data?.find((view) => view.id === activeViewId);
+    const name = window.prompt("Nome da cópia", current ? `${current.name} (cópia)` : "Nova visualização");
+    if (!name?.trim()) return;
+    const view = await api<SavedProjectView>("/board/views", "POST", { name: name.trim(), layout, config: viewConfig(), position: viewQuery.data?.length ?? 0 });
+    setActiveViewId(view.id);
+  });
+  const renameView = () => run(async () => {
+    const current = viewQuery.data?.find((view) => view.id === activeViewId);
+    if (!current) return;
+    const name = window.prompt("Novo nome da visualização", current.name);
+    if (!name?.trim() || name.trim() === current.name) return;
+    await api(`/board/views/${current.id}`, "PUT", { name: name.trim(), layout: current.layout, config: current.config, position: current.position });
+  });
+  const moveView = (identity: number, delta: number) => run(async () => {
+    const current = [...(viewQuery.data ?? [])].sort((a, b) => a.position - b.position);
+    const from = current.findIndex((view) => view.id === identity); const to = from + delta;
+    if (from < 0 || to < 0 || to >= current.length) return;
+    [current[from], current[to]] = [current[to], current[from]];
+    await api("/board/views/order", "PUT", { ids: current.map((view) => view.id) });
+  });
+  const deleteView = () => run(async () => {
+    if (activeViewId === null || !window.confirm("Excluir esta visualização salva?")) return;
+    await api(`/board/views/${activeViewId}`, "DELETE");
+    setActiveViewId(null);
+    setLayout("board"); setFilterQuery(""); setGroupBy(""); setSortBy(""); setSliceBy(""); setSliceValue(""); setSumBy(""); setVisibleFields([]); setDescending(false);
+  });
+  const updateColumnOrder = (ordered: ProjectColumn[]) => run(() => api("/board/columns/order", "PUT", { keys: ordered.map((column) => column.key) }));
+  const addColumn = () => run(async () => {
+    const created = await api<ProjectColumn>("/board/columns", "POST", { title: "Título coluna" });
+    setEditingColumn(created.key);
+  });
+  const renameColumn = (column: ProjectColumn, title: string) => {
+    setEditingColumn(null);
+    if (title.trim() && title.trim() !== column.title) void run(() => api(`/board/columns/${column.key}`, "PUT", { title: title.trim() }));
+  };
+  const removeColumn = (column: ProjectColumn) => run(async () => {
+    if (window.confirm(`Excluir a coluna “${column.title}”? Ela precisa estar vazia.`)) await api(`/board/columns/${column.key}`, "DELETE");
+  });
+  const allTasks = rows.data ?? [];
+  const meSupplierId = suppliers.find((supplier) => supplier.user_id === account.id)?.id;
+  let filteredTasks = filterBoardTasks(allTasks, filterQuery, columns, suppliers, sprints, meSupplierId);
+  if (sliceBy && sliceValue) filteredTasks = filteredTasks.filter((task) => {
+    const value = sliceBy === "status" ? task.status : sliceBy === "supplier" ? task.supplier_id : sliceBy === "sprint" ? task.sprint_id : sliceBy === "priority" ? task.priority : sliceBy === "approval" ? task.approval : task.labels?.map((label) => label.text).includes(sliceValue) ? sliceValue : null;
+    return String(value ?? "") === sliceValue;
+  });
+  const getSortValue = (task: Task) => sortBy === "title" ? task.title.toLocaleLowerCase("pt-BR") : sortBy === "priority" ? task.priority : sortBy === "due" ? task.due ?? "9999" : sortBy === "created_at" ? task.created_at ?? "" : sortBy === "supplier" ? suppliers.find((supplier) => supplier.id === task.supplier_id)?.name ?? "" : groupBy === "supplier" ? suppliers.find((supplier) => supplier.id === task.supplier_id)?.name ?? "" : groupBy === "priority" ? task.priority : groupBy === "sprint" ? task.sprint_id ?? 0 : groupBy === "approval" ? task.approval : groupBy === "status" ? task.status_title ?? task.status : task.priority;
+  if (sortBy || groupBy) filteredTasks = [...filteredTasks].sort((a, b) => (String(getSortValue(a)).localeCompare(String(getSortValue(b)), "pt-BR", { numeric: true })) * (descending ? -1 : 1));
+  const sliceOptions = sliceBy === "status" ? columns.map((column) => ({ value: column.key, label: column.title })) : sliceBy === "supplier" ? suppliers.map((supplier) => ({ value: String(supplier.id), label: supplier.name })) : sliceBy === "sprint" ? Array.from(new Set(allTasks.map((task) => task.sprint_id).filter((id): id is number => id !== null))).map((id) => ({ value: String(id), label: `Sprint ${id}` })) : sliceBy === "priority" ? Array.from(new Set(allTasks.map((task) => task.priority))).map((priority) => ({ value: String(priority), label: `Prioridade ${priority}` })) : sliceBy === "approval" ? Array.from(new Set(allTasks.map((task) => task.approval))).map((approval) => ({ value: approval, label: approval })) : sliceBy === "label" ? Array.from(new Set(allTasks.flatMap((task) => task.labels?.map((label) => label.text) ?? []))).map((label) => ({ value: label, label })) : [];
+  const customFieldMap = new Map<string, { key: string; label: string }>();
+  for (const task of allTasks) for (const field of task.fields) customFieldMap.set(field.id, { key: field.id, label: field.label });
+  const availableFields: { key: string; label: string }[] = [
+    { key: "title", label: "Card" }, { key: "status", label: "Status" }, { key: "supplier", label: "Fornecedor" }, { key: "sprint", label: "Sprint" },
+    { key: "priority", label: "Prioridade" }, { key: "labels", label: "Etiquetas" }, { key: "due", label: "Prazo" }, { key: "approval", label: "Aprovação" },
+    { key: "created_at", label: "Criado em" }, { key: "description", label: "Descrição" }, { key: "estimated_minutes", label: "Horas previstas" }, { key: "used_minutes", label: "Horas utilizadas" },
+    ...customFieldMap.values(),
+    ...(account.role !== "supplier" && account.permissions.includes("view_financial") ? [{ key: "cost_cents", label: "Custo aprovado" }] : []),
+  ];
+  const displayedFields = visibleFields.length ? visibleFields : availableFields.slice(0, 8).map((field) => field.key);
+  const saveSchedule = (task: Task, planned_start: string, due: string) => run(() => api(`/tasks/${task.id}/schedule`, "PUT", { version: task.version, planned_start: planned_start || null, due: due || null }));
   return (
     <>
       <div className="section-title">
@@ -500,7 +641,14 @@ export function Board({
       ) : rows.isError ? (
         <Empty>{rows.error.message}</Empty>
       ) : (
-        <DndContext
+        <>
+        <ViewTools views={viewQuery.data ?? []} activeId={activeViewId} layout={layout} query={filterQuery} groupBy={groupBy} sortBy={sortBy} zoom={zoom} fields={availableFields} visibleFields={displayedFields} sliceBy={sliceBy} sliceValue={sliceValue} sliceOptions={sliceOptions} sumBy={sumBy} descending={descending} financial={account.role !== "supplier" && account.permissions.includes("view_financial")}
+          onSelect={selectView} onLayout={setLayout} onQuery={setFilterQuery} onGroup={setGroupBy} onSort={setSortBy} onZoom={setZoom}
+          onSliceBy={setSliceBy} onSliceValue={setSliceValue} onSum={setSumBy} onDirection={() => setDescending((current) => !current)}
+          onToggleField={(field) => setVisibleFields(() => displayedFields.includes(field) ? displayedFields.filter((key) => key !== field) : [...displayedFields, field])}
+          onMoveField={(field, delta) => setVisibleFields(() => { const next = [...displayedFields]; const from = next.indexOf(field); const to = from + delta; if (to >= 0 && to < next.length) [next[from], next[to]] = [next[to], next[from]]; return next; })}
+          onSave={saveView} onDuplicate={duplicateView} onDelete={deleteView} onRename={renameView} onMoveView={moveView} />
+        {layout === "table" ? <ProjectTable tasks={filteredTasks} columns={columns} suppliers={suppliers} fields={availableFields} visibleFields={displayedFields} groupBy={groupBy} sumBy={sumBy} open={open} /> : layout === "timeline" ? <TimelineView tasks={filteredTasks} columns={columns} suppliers={suppliers} sprints={sprints} zoom={zoom} account={account} saveSchedule={saveSchedule} open={open} /> : <DndContext
           sensors={sensors}
           collisionDetection={(args) => {
             const scoped = {
@@ -517,23 +665,44 @@ export function Board({
           onDragCancel={() => setActiveTask(null)}
         >
           <div className="kanban">
-            {Object.keys(stages).map((status) => (
+            {columns.map((column, columnIndex) => (
               <Column
-                key={status}
-                status={status}
+                key={column.key}
+                status={column.key}
+                title={column.title}
+                canManage={canManage}
+                isFirst={columnIndex === 0}
+                isLast={columnIndex === columns.length - 1}
+                editing={editingColumn === column.key}
+                onEdit={() => setEditingColumn(column.key)}
+                onRename={(title) => renameColumn(column, title)}
+                onDelete={() => removeColumn(column)}
+                onMove={(delta) => {
+                  const next = [...columns]; const target = columnIndex + delta;
+                  if (target < 0 || target >= next.length) return;
+                  [next[columnIndex], next[target]] = [next[target], next[columnIndex]];
+                  updateColumnOrder(next);
+                }}
+                onDragStart={() => setDraggedColumn(column.key)}
+                onDrop={() => {
+                  if (!draggedColumn || draggedColumn === column.key) return;
+                  const next = [...columns]; const from = next.findIndex((item) => item.key === draggedColumn); const to = next.findIndex((item) => item.key === column.key);
+                  next.splice(to, 0, next.splice(from, 1)[0]); setDraggedColumn(null); updateColumnOrder(next);
+                }}
                 count={
-                  rows.data.filter((task) => task.status === status).length
+                  filteredTasks.filter((task) => task.status === column.key).length
                 }
+                summary={sumBy === "estimated_minutes" ? `${(filteredTasks.filter((task) => task.status === column.key).reduce((sum, task) => sum + task.estimated_minutes, 0) / 60).toFixed(1)} h previstas` : sumBy === "used_minutes" ? `${(filteredTasks.filter((task) => task.status === column.key).reduce((sum, task) => sum + task.used_minutes, 0) / 60).toFixed(1)} h utilizadas` : sumBy === "cost_cents" && account.role !== "supplier" && account.permissions.includes("view_financial") ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(filteredTasks.filter((task) => task.status === column.key).reduce((sum, task) => sum + (task.cost_cents ?? 0), 0) / 100) : sumBy === "count" ? `${filteredTasks.filter((task) => task.status === column.key).length} cards` : ""}
               >
                 {
                   <SortableContext
-                    items={rows.data
-                      .filter((task) => task.status === status)
+                    items={filteredTasks
+                      .filter((task) => task.status === column.key)
                       .map((task) => task.id)}
                     strategy={verticalListSortingStrategy}
                   >
-                    {rows.data
-                      .filter((task) => task.status === status)
+                    {filteredTasks
+                      .filter((task) => task.status === column.key)
                       .map((task) => (
                         <DraggableTask
                           key={task.id}
@@ -546,6 +715,7 @@ export function Board({
                 }
               </Column>
             ))}
+            {canManage && <button className="kanban-add-column" aria-label="Adicionar coluna ao Kanban" title="Adicionar coluna" onClick={addColumn}><Plus size={22} aria-hidden="true" /></button>}
           </div>
           <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)" }}>
             {activeTask ? (
@@ -567,7 +737,8 @@ export function Board({
               </article>
             ) : null}
           </DragOverlay>
-        </DndContext>
+        </DndContext>}
+        </>
       )}
     </>
   );
@@ -675,7 +846,7 @@ export function TaskDetail({
         ) : (
           <>
             <span className={"badge " + task.status}>
-              {stages[task.status]}
+              {stages[task.status] ?? task.status_title ?? task.status}
             </span>
             <p>{task.description}</p>
             <TaskLabels labels={task.labels} />
@@ -683,7 +854,7 @@ export function TaskDetail({
               {approvals[task.approval]}{" "}
               {task.approval_reason && "— " + task.approval_reason}
             </p>
-            {task.cost_cents !== undefined && (
+            {task.cost_cents != null && (
               <p>
                 Tarifa congelada:{" "}
                 {task.rate_cents === null

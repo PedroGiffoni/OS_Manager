@@ -438,6 +438,8 @@ export default function App() {
                 <Board
                   query={params.toString()}
                   suppliers={suppliers.data ?? []}
+                  sprints={sprints.data ?? []}
+                  account={account}
                   run={run}
                   open={setOpened}
                 />
@@ -592,7 +594,7 @@ function Dashboard({ query }: { query: string }) {
             <BarChart
               data={d.by_status.map((row: any) => ({
                 ...row,
-                label: stages[row.status],
+                label: row.label ?? stages[row.status] ?? row.status,
               }))}
             >
               <XAxis

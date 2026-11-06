@@ -3,6 +3,7 @@ import secrets
 import time
 import json
 import logging
+from uuid import uuid4
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone, date
 from fastapi import FastAPI, Depends, Request, Response, Query
@@ -28,6 +29,8 @@ from .models import (
     Hours,
     Approval,
     Audit,
+    KanbanColumn,
+    KanbanSavedView,
 )
 from .security import (
     current_user,
@@ -55,6 +58,12 @@ from .schemas import (
     CardSchema,
     FieldValues,
     ReorderItem,
+    KanbanColumnCreate,
+    KanbanColumnRename,
+    KanbanColumnOrder,
+    SavedViewInput,
+    SavedViewOrder,
+    TaskScheduleInput,
 )
 from .services import (
     fail,
@@ -498,6 +507,159 @@ def task_detail(identity: int, user=Depends(current_user), db=Depends(get_db)):
     return task_payload(db, user, get_task(db, user, identity))
 
 
+def internal_manager(user):
+    if user.role not in {"admin", "manager"}:
+        fail("Somente administradores e gestores podem configurar o quadro.", 403)
+
+
+@app.get(PREFIX + "/board/columns")
+def board_columns(user=Depends(current_user), db=Depends(get_db)):
+    return [
+        {"key": row.key, "title": row.title, "is_system": row.is_system, "view_order": row.view_order}
+        for row in db.scalars(select(KanbanColumn).order_by(KanbanColumn.view_order))
+    ]
+
+
+@app.post(PREFIX + "/board/columns", status_code=201)
+def add_board_column(data: KanbanColumnCreate, user=Depends(current_user), db=Depends(get_db)):
+    internal_manager(user)
+    rows = list(db.scalars(select(KanbanColumn).order_by(KanbanColumn.workflow_order)))
+    last_custom = max((row.workflow_order for row in rows if not row.is_system), default=300)
+    row = KanbanColumn(
+        key="custom_" + uuid4().hex[:16],
+        title=data.title,
+        is_system=False,
+        workflow_order=last_custom + 100,
+        view_order=max((column.view_order for column in rows), default=-1) + 1,
+    )
+    db.add(row)
+    audit(db, user, "kanban", 1, "column_created", key=row.key, title=row.title)
+    db.commit()
+    return {"key": row.key, "title": row.title, "is_system": row.is_system, "view_order": row.view_order}
+
+
+@app.put(PREFIX + "/board/columns/order")
+def order_board_columns(data: KanbanColumnOrder, user=Depends(current_user), db=Depends(get_db)):
+    internal_manager(user)
+    rows = list(db.scalars(select(KanbanColumn)))
+    by_key = {row.key: row for row in rows}
+    if len(data.keys) != len(rows) or set(data.keys) != set(by_key):
+        fail("A ordem deve incluir todas as colunas atuais exatamente uma vez.")
+    for index, key in enumerate(data.keys):
+        by_key[key].view_order = -index - 1
+    db.flush()
+    for index, key in enumerate(data.keys):
+        by_key[key].view_order = index
+    audit(db, user, "kanban", 1, "columns_reordered", keys=data.keys)
+    db.commit()
+    return board_columns(user, db)
+
+
+@app.put(PREFIX + "/board/columns/{key}")
+def rename_board_column(key: str, data: KanbanColumnRename, user=Depends(current_user), db=Depends(get_db)):
+    internal_manager(user)
+    row = db.get(KanbanColumn, key)
+    if not row:
+        fail("Coluna não encontrada.", 404)
+    if row.is_system:
+        fail("As colunas estruturais não podem ser renomeadas.")
+    previous = row.title
+    row.title = data.title
+    audit(db, user, "kanban", 1, "column_renamed", key=key, previous=previous, title=row.title)
+    db.commit()
+    return {"key": row.key, "title": row.title, "is_system": row.is_system, "view_order": row.view_order}
+
+
+@app.delete(PREFIX + "/board/columns/{key}")
+def delete_board_column(key: str, user=Depends(current_user), db=Depends(get_db)):
+    internal_manager(user)
+    row = db.get(KanbanColumn, key)
+    if not row:
+        fail("Coluna não encontrada.", 404)
+    if row.is_system:
+        fail("As colunas estruturais não podem ser excluídas.")
+    if db.scalar(select(Task.id).where(Task.status == key).limit(1)):
+        fail("Mova os cards para outra coluna antes de excluí-la.", 409)
+    db.delete(row)
+    db.flush()
+    remaining = list(db.scalars(select(KanbanColumn).order_by(KanbanColumn.view_order)))
+    for index, column in enumerate(remaining):
+        column.view_order = -index - 1
+    db.flush()
+    for index, column in enumerate(remaining):
+        column.view_order = index
+    audit(db, user, "kanban", 1, "column_deleted", key=key, title=row.title)
+    db.commit()
+    return {"ok": True}
+
+
+def view_payload(row):
+    return {"id": row.id, "name": row.name, "layout": row.layout, "config": row.config, "position": row.position}
+
+
+@app.get(PREFIX + "/board/views")
+def saved_views(user=Depends(current_user), db=Depends(get_db)):
+    return [view_payload(row) for row in db.scalars(select(KanbanSavedView).where(KanbanSavedView.user_id == user.id).order_by(KanbanSavedView.position, KanbanSavedView.id))]
+
+
+@app.post(PREFIX + "/board/views", status_code=201)
+def create_saved_view(data: SavedViewInput, user=Depends(current_user), db=Depends(get_db)):
+    row = KanbanSavedView(user_id=user.id, **data.model_dump())
+    db.add(row)
+    db.commit()
+    return view_payload(row)
+
+
+@app.put(PREFIX + "/board/views/order")
+def order_saved_views(data: SavedViewOrder, user=Depends(current_user), db=Depends(get_db)):
+    rows = list(db.scalars(select(KanbanSavedView).where(KanbanSavedView.user_id == user.id)))
+    by_id = {row.id: row for row in rows}
+    if len(data.ids) != len(rows) or set(data.ids) != set(by_id):
+        fail("A ordem deve incluir todas as suas visualizações exatamente uma vez.")
+    for index, identity in enumerate(data.ids):
+        by_id[identity].position = index
+    db.commit()
+    return saved_views(user, db)
+
+
+@app.put(PREFIX + "/board/views/{identity}")
+def update_saved_view(identity: int, data: SavedViewInput, user=Depends(current_user), db=Depends(get_db)):
+    row = db.scalar(select(KanbanSavedView).where(KanbanSavedView.id == identity, KanbanSavedView.user_id == user.id))
+    if not row:
+        fail("Visualização não encontrada.", 404)
+    for key, value in data.model_dump().items():
+        setattr(row, key, value)
+    db.commit()
+    return view_payload(row)
+
+
+@app.delete(PREFIX + "/board/views/{identity}")
+def delete_saved_view(identity: int, user=Depends(current_user), db=Depends(get_db)):
+    row = db.scalar(select(KanbanSavedView).where(KanbanSavedView.id == identity, KanbanSavedView.user_id == user.id))
+    if not row:
+        fail("Visualização não encontrada.", 404)
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+@app.put(PREFIX + "/tasks/{identity}/schedule")
+def update_task_schedule(identity: int, data: TaskScheduleInput, user=Depends(current_user), db=Depends(get_db)):
+    require(user, "create_tasks")
+    row = get_task(db, user, identity, True)
+    version(row, data.version)
+    if row.status == "done":
+        fail("Reabra a atividade antes de alterar o cronograma.", 409)
+    if data.planned_start and data.due and data.due < data.planned_start:
+        fail("O prazo deve ser igual ou posterior ao início planejado.")
+    row.planned_start = data.planned_start.isoformat() if data.planned_start else None
+    row.due = data.due.isoformat() if data.due else None
+    row.version += 1
+    audit(db, user, "task", row.id, "schedule_changed", planned_start=row.planned_start, due=row.due)
+    db.commit()
+    return task_payload(db, user, row)
+
+
 @app.post(PREFIX + "/tasks", status_code=201)
 def create_task(data: TaskCreate, user=Depends(current_user), db=Depends(get_db)):
     require(user, "create_tasks")
@@ -603,6 +765,8 @@ def put_hours(identity: int, data: HoursInput, user=Depends(current_user), db=De
         fail("Somente fornecedor atribuído informa horas.", 403)
     if row.status == "done" or row.approval == "approved":
         fail("Horas aprovadas exigem reabertura formal.", 409)
+    if row.status not in {"production", "review"}:
+        fail("Horas só podem ser preenchidas em Em produção ou Em revisão.")
     if (
         row.status == "production"
         and estimate_required(db, row, "production")

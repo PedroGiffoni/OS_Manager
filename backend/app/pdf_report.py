@@ -381,7 +381,7 @@ def build_pdf(data, financial, filters):
                 "Onde o trabalho permanece",
                 "Tempo corrido comprovado; não equivale a esforço",
                 [
-                    (STATUSES[r["status"]], r["duration_seconds"], duration(r["duration_seconds"]))
+                    (STATUSES.get(r["status"], r["status"]), r["duration_seconds"], duration(r["duration_seconds"]))
                     for r in data["summary"]["phase_seconds"]
                 ],
                 height=158,
@@ -470,7 +470,7 @@ def build_pdf(data, financial, filters):
         [
             f"OS-{c['id']}",
             c["title"],
-            STATUSES[c["status"]],
+            STATUSES.get(c["status"], c["status"]),
             c["supplier_name"] or "Não atribuído",
             duration(c["current_phase_seconds"]),
             duration(c["lead_time_seconds"]),
@@ -491,7 +491,7 @@ def build_pdf(data, financial, filters):
                 [
                     p(f"OS-{card['id']} / {card['title']}", "h2"),
                     p(
-                        STATUSES[card["status"]]
+                        STATUSES.get(card["status"], card["status"])
                         + " · "
                         + (card["supplier_name"] or "Sem fornecedor")
                         + " · Observado até "
@@ -531,7 +531,7 @@ def build_pdf(data, financial, filters):
             ["Etapa", "Entrada", "Saída", "Permanência", "Evidência"],
             [
                 [
-                    STATUSES[v["status"]],
+                    STATUSES.get(v["status"], v["status"]),
                     stamp(v["entered_at"]),
                     stamp(v["exited_at"]) if v["exited_at"] else "Em aberto",
                     duration(v["duration_seconds"]),

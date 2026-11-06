@@ -92,8 +92,10 @@ class Task(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     labels: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     status: Mapped[str] = mapped_column(String, default="backlog", index=True)
+    board_origin_status: Mapped[str | None] = mapped_column(String, nullable=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)
     due: Mapped[str | None] = mapped_column(String, nullable=True)
+    planned_start: Mapped[str | None] = mapped_column(String, nullable=True)
     creator_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), index=True)
     sprint_id: Mapped[int | None] = mapped_column(ForeignKey("sprints.id"), index=True)
@@ -208,3 +210,24 @@ class Comment(Base):
     body: Mapped[str] = mapped_column(Text)
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[str] = mapped_column(String, default=now)
+
+
+class KanbanColumn(Base):
+    __tablename__ = "kanban_columns"
+    __table_args__ = (UniqueConstraint("workflow_order"), UniqueConstraint("view_order"))
+    key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    title: Mapped[str] = mapped_column(String(100))
+    is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    workflow_order: Mapped[int] = mapped_column(Integer)
+    view_order: Mapped[int] = mapped_column(Integer)
+
+
+class KanbanSavedView(Base):
+    __tablename__ = "kanban_saved_views"
+    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    layout: Mapped[str] = mapped_column(String(20), default="board")
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    position: Mapped[int] = mapped_column(Integer, default=0)

@@ -27,7 +27,7 @@ def build_export(format, rows, summary, financial, filters):
         [
             row["id"],
             row["title"],
-            LABELS[row["status"]],
+            LABELS.get(row["status"], row["status"]),
             row["estimated_minutes"],
             row["used_minutes"],
         ]
@@ -108,7 +108,7 @@ def build_export(format, rows, summary, financial, filters):
         chart = VerticalBarChart()
         chart.x, chart.y, chart.width, chart.height = 40, 25, 580, 100
         chart.data = [[item["count"] for item in summary["by_status"]]]
-        chart.categoryAxis.categoryNames = [LABELS[item["status"]] for item in summary["by_status"]]
+        chart.categoryAxis.categoryNames = [LABELS.get(item["status"], item["status"]) for item in summary["by_status"]]
         chart.valueAxis.valueMin = 0
         chart.valueAxis.valueMax = max(1, max(item["count"] for item in summary["by_status"]))
         chart.bars[0].fillColor = colors.HexColor("#237e85")

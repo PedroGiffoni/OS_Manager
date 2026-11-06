@@ -30,3 +30,6 @@ Todos os campos nativos e personalizados visíveis, exceto descrição, podem co
 
 ## Relatórios exclusivos para usuários internos — 05/11/2026
 Por decisão do responsável, fornecedores deixam de acessar consultas e exportações de relatórios, incluindo cards próprios e qualquer formato (Excel/PDF/HTML). O bloqueio ocorre na API, no menu e na URL da página. Tarefas, horas e visão geral do próprio escopo continuam disponíveis. Esta regra substitui a permissão anterior de exportação operacional pelo fornecedor.
+
+## Views, linha do tempo e colunas Kanban — 06/11/2026
+As views são pessoais por conta e persistem no banco. Filtros seguem uma sintaxe inspirada no GitHub Projects, aplicada somente a campos existentes no Gestão de Demandas e respeitando o escopo da API; metadados de repositório, revisão e issue não existem neste produto. A linha do tempo usa data de início planejada e prazo; quando o início não foi informado, a barra usa a data de criação como referência visual. Administradores e gestores podem adicionar, renomear e reorganizar colunas. As colunas extras são etapas administrativas fora do fluxo nativo: movimentá-las não remove validações de horas/aprovação; para sair, o card retorna à etapa original ou avança para a etapa nativa seguinte. Apenas gestores podem mover cards por etapas extras. Colunas nativas não podem ser renomeadas ou removidas.

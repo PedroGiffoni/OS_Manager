@@ -34,8 +34,10 @@ export interface Task {
   description: string;
   labels?: TaskLabel[];
   status: string;
+  status_title?: string;
   priority: number;
   due: string | null;
+  planned_start?: string | null;
   supplier_id: number | null;
   sprint_id: number | null;
   estimated_minutes: number;
@@ -44,10 +46,11 @@ export interface Task {
   approval: string;
   approval_reason?: string;
   version: number;
+  created_at?: string;
+  cost_cents?: number | null;
   fields: Field[];
   values: Record<string, any>;
   rate_cents?: number | null;
-  cost_cents?: number;
 }
 export interface Supplier {
   id: number;

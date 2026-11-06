@@ -70,6 +70,34 @@ class Move(Version):
     reason: str = Field(default="", max_length=1000)
 
 
+class KanbanColumnCreate(Input):
+    title: str = Field(min_length=1, max_length=100)
+
+
+class KanbanColumnRename(Input):
+    title: str = Field(min_length=1, max_length=100)
+
+
+class KanbanColumnOrder(Input):
+    keys: list[str] = Field(min_length=5, max_length=30)
+
+
+class SavedViewInput(Input):
+    name: str = Field(min_length=1, max_length=80)
+    layout: Literal["board", "table", "timeline"] = "board"
+    config: dict = Field(default_factory=dict)
+    position: StrictInt = Field(default=0, ge=0, le=1000)
+
+
+class SavedViewOrder(Input):
+    ids: list[StrictInt] = Field(max_length=100)
+
+
+class TaskScheduleInput(Version):
+    planned_start: date | None = None
+    due: date | None = None
+
+
 class HoursInput(Version):
     estimated_minutes: StrictInt = Field(ge=0, le=600000)
     used_minutes: StrictInt = Field(ge=0, le=600000)

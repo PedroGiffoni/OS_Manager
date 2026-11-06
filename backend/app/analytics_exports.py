@@ -49,7 +49,7 @@ def build_export(format, data, financial, filters):
                 card["id"],
                 card["title"],
                 card["supplier_name"],
-                STATUSES[card["status"]],
+                STATUSES.get(card["status"], card["status"]),
                 card["created_at"],
                 card["as_of"],
                 card["history_complete"],
@@ -89,7 +89,7 @@ def build_export(format, data, financial, filters):
         [
             [
                 card["id"],
-                STATUSES[period["status"]],
+                STATUSES.get(period["status"], period["status"]),
                 period["entered_at"],
                 period["exited_at"],
                 period["duration_seconds"],
