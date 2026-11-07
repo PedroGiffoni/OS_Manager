@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Archive, CalendarPlus, Layers3, Plus, Rocket, X } from "lucide-react";
 import { api } from "./api";
@@ -18,6 +19,8 @@ type WorkflowCondition = { field: "approval" | "work_type" | "priority" | "suppl
 type WorkflowAction = { action: "set_priority" | "add_label" | "remove_label" | "add_comment" | "set_due_after_days" | "assign_internal_user" | "add_watcher" | "set_custom_fields"; config: Record<string, unknown> };
 type Transition = { id: number; source: string; target: string; enabled: boolean; roles: string[]; work_types: string[]; required_fields: string[]; type_rules: Partial<Record<WorkType, TypeRule>>; conditions: WorkflowCondition[]; actions: WorkflowAction[] };
 type Rule = { id: number; name: string; trigger: string; schedule_time: string | null; schedule_frequency: "daily" | "weekly"; schedule_weekdays: number[]; conditions: Record<string, unknown>; action: string; config: Record<string, any>; actions: WorkflowAction[]; enabled: boolean };
+type PlanningTab = "releases" | "components" | "capacity" | "workflow" | "automations";
+const planningTabs: PlanningTab[] = ["releases", "components", "capacity", "workflow", "automations"];
 type AutomationRun = { id: number; created_at: string; rule_id: number | null; rule_name: string; trigger: string; task_id: number; task_key: string; task_title: string; actor_name: string; changed_fields: string[]; comments_added: number; watchers_added: number; skipped_actions: number };
 const conditionSummary = (condition: WorkflowCondition, users: CapacityUser[] = []) => {
   if (condition.field === "due_overdue") return `prazo vencido ${condition.value ? "sim" : "não"}`;
@@ -41,7 +44,19 @@ const validCustomFieldValues = (raw: string) => {
 };
 
 export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAutomation, run }: { suppliers: Supplier[]; canPlan: boolean; canCapacity: boolean; canWorkflow: boolean; canAutomation: boolean; run: Run }) {
-  const [tab, setTab] = useState<"releases" | "components" | "capacity" | "workflow" | "automations">("releases");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<PlanningTab>(() => {
+    const requested = searchParams.get("aba");
+    return planningTabs.includes(requested as PlanningTab) ? requested as PlanningTab : "releases";
+  });
+  useEffect(() => {
+    const requested = searchParams.get("aba");
+    setTab(planningTabs.includes(requested as PlanningTab) ? requested as PlanningTab : "releases");
+  }, [searchParams]);
+  const selectTab = (next: PlanningTab) => {
+    setTab(next);
+    setSearchParams({ aba: next }, { replace: true });
+  };
   const [release, setRelease] = useState({ name: "", description: "", starts: "", due: "" });
   const [component, setComponent] = useState({ name: "", description: "" });
   const [capacity, setCapacity] = useState({ resource_type: "supplier", resource_id: "", starts: dateToday(), ends: dateToday(), hours: "40", notes: "" });
@@ -256,11 +271,11 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
   return <section className="planning-page">
     <div className="section-title"><div><span className="eyebrow">Planejamento ampliado</span><h2>Releases, componentes e capacidade</h2></div><span>Versões de entrega e disponibilidade de recursos</span></div>
     <nav className="tabs" aria-label="Áreas do planejamento">
-      <button aria-pressed={tab === "releases"} onClick={() => setTab("releases")}><Rocket size={16} /> Releases</button>
-      <button aria-pressed={tab === "components"} onClick={() => setTab("components")}><Layers3 size={16} /> Componentes</button>
-      {canCapacity && <button aria-pressed={tab === "capacity"} onClick={() => setTab("capacity")}><CalendarPlus size={16} /> Capacidade</button>}
-      {canWorkflow && <button aria-pressed={tab === "workflow"} onClick={() => setTab("workflow")}>Fluxos</button>}
-      {canAutomation && <button aria-pressed={tab === "automations"} onClick={() => setTab("automations")}>Automações</button>}
+      {canPlan && <button aria-pressed={tab === "releases"} onClick={() => selectTab("releases")}><Rocket size={16} /> Releases</button>}
+      {canPlan && <button aria-pressed={tab === "components"} onClick={() => selectTab("components")}><Layers3 size={16} /> Componentes</button>}
+      {canCapacity && <button aria-pressed={tab === "capacity"} onClick={() => selectTab("capacity")}><CalendarPlus size={16} /> Capacidade</button>}
+      {canWorkflow && <button aria-pressed={tab === "workflow"} onClick={() => selectTab("workflow")}>Fluxos</button>}
+      {canAutomation && <button aria-pressed={tab === "automations"} onClick={() => selectTab("automations")}>Automações</button>}
     </nav>
     {!actionsAllowed && <Empty>Você não tem permissão para administrar este planejamento.</Empty>}
     {tab === "releases" && <div className="planning-layout">

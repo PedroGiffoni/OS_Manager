@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   ListTodo,
   CalendarRange,
-  CalendarPlus,
   Columns3,
   UsersRound,
   ChartNoAxesCombined,
@@ -23,6 +22,10 @@ import {
   ChevronRight,
   Bell,
   Filter,
+  Rocket,
+  Gauge,
+  GitBranch,
+  Zap,
 } from "lucide-react";
 import type { Account } from "./types";
 import { useTheme } from "./useTheme";
@@ -65,6 +68,8 @@ function Navigation({
   onNavigate?: () => void;
 }) {
   const [search, setSearch] = useState("");
+  const location = useLocation();
+  const activePlanningTab = new URLSearchParams(location.search).get("aba") ?? "releases";
   const items = [
     {
       to: "/",
@@ -102,11 +107,39 @@ function Navigation({
       visible: true,
     },
     {
-      to: "/planejamento",
-      label: "Planejamento avançado",
-      icon: CalendarPlus,
-      group: "Gestão",
-      visible: ["manage_planning", "manage_capacity", "manage_workflows", "manage_automation"].some((permission) => account.permissions.includes(permission)),
+      to: "/planejamento?aba=releases",
+      label: "Releases e versões",
+      icon: Rocket,
+      group: "Configuração",
+      visible: account.permissions.includes("manage_planning"),
+    },
+    {
+      to: "/planejamento?aba=components",
+      label: "Componentes",
+      icon: Layers3,
+      group: "Configuração",
+      visible: account.permissions.includes("manage_planning"),
+    },
+    {
+      to: "/planejamento?aba=capacity",
+      label: "Capacidade da equipe",
+      icon: Gauge,
+      group: "Configuração",
+      visible: account.permissions.includes("manage_capacity"),
+    },
+    {
+      to: "/planejamento?aba=workflow",
+      label: "Fluxos de trabalho",
+      icon: GitBranch,
+      group: "Configuração",
+      visible: account.permissions.includes("manage_workflows"),
+    },
+    {
+      to: "/planejamento?aba=automations",
+      label: "Automações",
+      icon: Zap,
+      group: "Configuração",
+      visible: account.permissions.includes("manage_automation"),
     },
     {
       to: "/aprovacoes",
@@ -158,7 +191,7 @@ function Navigation({
         </div>
       )}
       <nav aria-label="Menu principal">
-        {["Operação", "Gestão"].map((group) => (
+        {["Operação", "Gestão", "Configuração"].map((group) => (
           <div className="nav-group" key={group}>
             {!collapsed && items.some((item) => item.group === group) && (
               <p className="nav-group-label">{group}</p>
@@ -167,9 +200,16 @@ function Navigation({
               .filter((item) => item.group === group)
               .map(({ to, label, icon: Icon }) => (
                 <NavLink
-                  end={to === "/"}
+                  end={to === "/" || to.startsWith("/planejamento?")}
                   key={to}
                   to={to}
+                  className={({ isActive }) => {
+                    if (to.startsWith("/planejamento?")) {
+                      const targetTab = new URLSearchParams(to.split("?")[1]).get("aba");
+                      return location.pathname === "/planejamento" && activePlanningTab === targetTab ? "active" : undefined;
+                    }
+                    return isActive ? "active" : undefined;
+                  }}
                   onClick={onNavigate}
                   title={collapsed ? label : undefined}
                   aria-label={collapsed ? label : undefined}
