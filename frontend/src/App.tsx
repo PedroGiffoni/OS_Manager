@@ -584,7 +584,7 @@ export default function App() {
                 />
               }
             />
-            <Route path="/planejamento" element={<Planning suppliers={suppliers.data ?? []} canPlan={can("manage_planning")} canCapacity={can("manage_capacity")} canWorkflow={can("manage_workflows")} canAutomation={can("manage_automation")} run={run} />} />
+            <Route path="/planejamento" element={<Planning suppliers={suppliers.data ?? []} canPlan={account.role !== "supplier"} canCapacity={account.role !== "supplier"} canWorkflow={account.role !== "supplier"} canAutomation={account.role !== "supplier"} run={run} />} />
             <Route path="/filtros-salvos" element={<FilterSubscriptions run={run} />} />
             <Route
               path="/fornecedores"

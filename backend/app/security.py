@@ -26,10 +26,25 @@ PERMISSIONS = {
     "manage_automation",
     "manage_integrations",
 }
+INTERNAL_WORKSPACE_PERMISSIONS = {
+    "manage_planning",
+    "manage_capacity",
+    "manage_workflows",
+    "manage_automation",
+}
+
+
+def effective_permissions(user):
+    """Workspace planning features are open to internal accounts, never suppliers."""
+    if user.role == "supplier":
+        return set()
+    if user.role == "admin":
+        return set(PERMISSIONS)
+    return set(user.grants) | INTERNAL_WORKSPACE_PERMISSIONS
 
 
 def allowed(user, permission):
-    return user.role != "supplier" and (user.role == "admin" or permission in user.grants)
+    return permission in effective_permissions(user)
 
 
 def require(user, permission):

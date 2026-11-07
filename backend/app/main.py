@@ -84,6 +84,7 @@ from .security import (
     hasher,
     supplier_for,
     PERMISSIONS,
+    effective_permissions,
 )
 from .schemas import (
     Login,
@@ -360,7 +361,7 @@ def login(data: Login, request: Request, response: Response, db=Depends(get_db))
         "id": user.id,
         "username": user.username,
         "role": user.role,
-        "permissions": sorted(PERMISSIONS if user.role == "admin" else user.grants),
+        "permissions": sorted(effective_permissions(user)),
         "csrf": csrf,
     }
 
@@ -374,7 +375,7 @@ def me(request: Request, user=Depends(current_user)):
         "id": user.id,
         "username": user.username,
         "role": user.role,
-        "permissions": sorted(PERMISSIONS if user.role == "admin" else user.grants),
+        "permissions": sorted(effective_permissions(user)),
         "csrf": request.state.session.csrf,
     }
 
