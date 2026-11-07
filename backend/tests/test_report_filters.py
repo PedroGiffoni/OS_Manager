@@ -2,7 +2,7 @@ import json
 from io import BytesIO
 from openpyxl import load_workbook
 from pypdf import PdfReader
-from .test_acceptance import P, create, get, hours, review, decision
+from .test_acceptance import P, create, get, hours, move, review, decision
 
 
 def condition(field, op="eq", value="", value_to=""):
@@ -69,6 +69,7 @@ def test_all_card_field_types_and_combined_export_filters(clients):
             "attachment": [],
         },
     )
+    first = move(clients, first, "todo", user="supplier").json()
     first = hours(clients, first, 90, 0).json()
     definitions = admin.get(P + "/reports/fields").json()
     keys = {item["key"] for item in definitions}

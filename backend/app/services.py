@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from fastapi import HTTPException
 from sqlalchemy import select
+from .audit_trail import notify_task_watchers, record_task_changes
 from .models import (
     Task,
     Supplier,
@@ -14,8 +15,14 @@ from .models import (
     User,
     Attachment,
     KanbanColumn,
+    TaskRelease,
+    TaskComponent,
+    TaskDependency,
+    WorkflowTransition,
+    Hours,
 )
-from .security import allowed, supplier_for
+from .security import active_internal_user, allowed, supplier_for
+from .workflows import apply_transition_actions, conditions_match, transition_policy
 
 STATUSES = ["backlog", "todo", "production", "review", "done"]
 
@@ -26,16 +33,45 @@ def fail(message, status=422, code="BUSINESS_RULE"):
 
 def audit(db, actor, entity, identity, action, *, timestamp=None, **details):
     details["actor_name"] = actor.username
-    db.add(
-        Audit(
-            actor_id=actor.id,
-            entity=entity,
-            entity_id=identity,
-            action=action,
-            details=details,
-            **({"created_at": timestamp} if timestamp else {}),
-        )
+    audit_row = Audit(
+        actor_id=actor.id,
+        entity=entity,
+        entity_id=identity,
+        action=action,
+        details=details,
+        **({"created_at": timestamp} if timestamp else {}),
     )
+    db.add(audit_row)
+    record_task_changes(db, audit_row, entity, action, details)
+    if entity == "task":
+        notify_task_watchers(db, actor, identity, action, timestamp)
+
+
+def blocking_path_exists(db, start_task_id: int, target_task_id: int) -> bool:
+    """Return whether a directed `blocks` path already connects two tasks."""
+    if start_task_id == target_task_id:
+        return True
+    edges = db.execute(
+        select(TaskDependency.source_task_id, TaskDependency.target_task_id).where(
+            TaskDependency.link_type == "blocks"
+        )
+    ).all()
+    graph = {}
+    for source_id, target_id in edges:
+        graph.setdefault(source_id, []).append(target_id)
+    pending = [start_task_id]
+    visited = set()
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        for neighbor in graph.get(current, ()):
+            if neighbor == target_task_id:
+                return True
+            if neighbor not in visited:
+                pending.append(neighbor)
+    return False
 
 
 def version(row, expected):
@@ -118,6 +154,23 @@ def set_supplier(db, user, task, identity):
     )
 
 
+def set_internal_assignee(db, actor, task, identity):
+    active_internal_user(db, identity)
+    if task.assignee_user_id == identity:
+        return
+    previous = task.assignee_user_id
+    task.assignee_user_id = identity
+    audit(
+        db,
+        actor,
+        "task",
+        task.id,
+        "internal_assignee_changed",
+        previous_user_id=previous,
+        user_id=identity,
+    )
+
+
 def cost_cents(db, task, sprint_id=None):
     if task.approval != "approved":
         return 0
@@ -145,8 +198,11 @@ def task_payload(db, user, task):
             "id",
             "title",
             "description",
+            "work_type",
+            "parent_id",
             "labels",
             "status",
+            "resolution",
             "priority",
             "due",
             "planned_start",
@@ -160,12 +216,47 @@ def task_payload(db, user, task):
             "created_at",
         )
     }
+    if user.role == "supplier" and task.parent_id:
+        visible_parent = db.scalar(
+            scoped_tasks(db, user).where(Task.id == task.parent_id)
+        )
+        if not visible_parent:
+            result["parent_id"] = None
+    if user.role != "supplier":
+        result["assignee_user_id"] = task.assignee_user_id
     status_column = db.get(KanbanColumn, task.status)
     result["status_title"] = status_column.title if status_column else task.status
+    result["release_ids"] = list(
+        db.scalars(select(TaskRelease.release_id).where(TaskRelease.task_id == task.id))
+    )
+    result["component_ids"] = list(
+        db.scalars(select(TaskComponent.component_id).where(TaskComponent.task_id == task.id))
+    )
+    if user.role != "supplier":
+        result["links"] = [
+            {
+                "id": link.id,
+                "task_id": link.target_task_id if link.source_task_id == task.id else link.source_task_id,
+                "direction": "outgoing" if link.source_task_id == task.id else "incoming",
+                "type": link.link_type,
+            }
+            for link in db.scalars(
+                select(TaskDependency).where(
+                    (TaskDependency.source_task_id == task.id)
+                    | (TaskDependency.target_task_id == task.id)
+                )
+            )
+        ]
     decision = db.scalar(
         select(Approval).where(Approval.task_id == task.id).order_by(Approval.id.desc())
     )
     result["approval_reason"] = decision.reason if decision and not decision.approved else ""
+    current_hours = db.scalar(
+        select(Hours).where(Hours.task_id == task.id, Hours.version == task.hours_version)
+    ) if task.hours_version else None
+    result["worklog_comment"] = current_hours.comment if current_hours else ""
+    if user.role == "supplier" and current_hours and current_hours.author_id != user.id:
+        result["worklog_comment"] = ""
     schema = current_schema(db, task)
     visible = (
         [field for field in schema.fields if user.role in field["visible_to"]] if schema else []
@@ -261,8 +352,12 @@ def move_task(db, user, task, data):
     version(task, data.version)
     columns = list(db.scalars(select(KanbanColumn).order_by(KanbanColumn.workflow_order)))
     statuses = [column.key for column in columns] or STATUSES
+    columns_by_key = {column.key: column for column in columns}
     if data.status not in statuses:
         fail("Etapa inválida.")
+    destination_is_done = data.status == "done" or (
+        data.status in columns_by_key and columns_by_key[data.status].category == "done"
+    )
     manager = user.role in {"admin", "manager"}
     supplier = supplier_for(db, user)
     if not manager and not (
@@ -270,6 +365,24 @@ def move_task(db, user, task, data):
     ):
         fail("Sem autorização para mover esta atividade.", 403)
     origin = task.status
+    resolution_before = task.resolution
+    origin_is_done = origin == "done" or (
+        origin in columns_by_key and columns_by_key[origin].category == "done"
+    )
+    configured = transition_policy(
+        db.scalars(
+            select(WorkflowTransition).where(
+                WorkflowTransition.source == origin,
+                WorkflowTransition.target == data.status,
+            )
+        ),
+        task.work_type,
+    )
+    if configured:
+        if not configured.enabled:
+            fail("Esta transição está desativada no fluxo configurado.", 409)
+        if configured.allowed_roles is not None and user.role not in configured.allowed_roles:
+            fail("Seu perfil não pode executar esta transição.", 403)
     if not manager and (origin not in STATUSES or data.status not in STATUSES):
         fail("Somente gestor pode mover atividades em colunas adicionais.", 403)
     if data.status == origin:
@@ -286,9 +399,22 @@ def move_task(db, user, task, data):
             previous_priority=previous_priority,
         )
         return
-    if origin == "done":
-        if not manager or data.status != "review" or not data.reason:
-            fail("Reabertura exige gestor, destino Em revisão e justificativa.", 403)
+    if configured and not conditions_match(configured.conditions, task, db):
+        fail("As condições configuradas para esta transição não foram atendidas.", 409)
+    if origin_is_done:
+        reopen_target = "review" if origin == "done" else (task.board_origin_status or "review")
+        default_reopen = data.status == reopen_target
+        configured_reopen = configured is not None and configured.enabled
+        if (
+            not manager
+            or destination_is_done
+            or not (default_reopen or configured_reopen)
+            or not data.reason
+        ):
+            fail(
+                "Reabertura exige gestor, justificativa e retorno à revisão ou uma transição de reabertura configurada.",
+                403,
+            )
         audit(
             db,
             user,
@@ -302,10 +428,14 @@ def move_task(db, user, task, data):
         task.approval = "pending"
         task.hours_version += 1
         task.board_origin_status = None
+        task.resolution = None
     else:
         if origin in STATUSES and data.status in STATUSES:
-            if STATUSES.index(data.status) != STATUSES.index(origin) + 1:
-                fail("Retornos e saltos de etapa não estão autorizados nesta versão.")
+            distance = STATUSES.index(data.status) - STATUSES.index(origin)
+            if distance != 1 and not (distance < 0 and configured and configured.enabled):
+                fail(
+                    "Avanços devem seguir a próxima etapa; retornos exigem uma transição configurada."
+                )
         elif origin in STATUSES and data.status not in STATUSES:
             if not manager:
                 fail("Somente gestor pode mover atividades para colunas adicionais.", 403)
@@ -322,14 +452,18 @@ def move_task(db, user, task, data):
             allowed_destinations = {base_status}
             if base_status != "done" and STATUSES.index(base_status) < len(STATUSES) - 1:
                 allowed_destinations.add(STATUSES[STATUSES.index(base_status) + 1])
+            if configured and configured.enabled:
+                allowed_destinations.add(data.status)
             if data.status not in allowed_destinations:
-                fail("Retorne à etapa de origem ou avance somente para a próxima etapa do fluxo.")
+                fail(
+                    "Retorne à etapa de origem, avance para a próxima etapa ou configure esta transição."
+                )
             task.board_origin_status = None
         if estimate_required(db, task, data.status) and task.estimated_minutes <= 0:
             fail("Preencha as horas previstas para mover esta atividade para Em produção.")
         if data.status == "review" and task.used_minutes <= 0:
             fail("Preencha as horas utilizadas para mover esta atividade para Em revisão.")
-        if data.status == "done" and (not manager or task.approval != "approved"):
+        if destination_is_done and (not manager or task.approval != "approved"):
             fail("Conclusão exige gestor e horas aprovadas.", 403)
     schema = current_schema(db, task)
     if schema:
@@ -346,7 +480,29 @@ def move_task(db, user, task, data):
         ]
         if missing:
             fail("Preencha os campos obrigatórios: " + ", ".join(missing))
+        if configured and configured.required_fields:
+            by_id = {field["id"]: field for field in schema.fields}
+            extra_missing = [
+                by_id[identity]["label"] if identity in by_id else identity
+                for identity in configured.required_fields
+                if identity not in by_id or (
+                    field_value(task, schema, by_id[identity]) is None
+                    or field_value(task, schema, by_id[identity]) == ""
+                    or (
+                        by_id[identity]["type"] == "checkbox"
+                        and field_value(task, schema, by_id[identity]) is not True
+                    )
+                )
+            ]
+            if extra_missing:
+                fail("Preencha os campos da transição: " + ", ".join(extra_missing))
+    elif configured and configured.required_fields:
+        fail("Configure os campos obrigatórios adicionais no card antes desta transição.")
     task.status, task.priority = data.status, data.priority
+    if destination_is_done:
+        task.resolution = data.resolution
+    elif origin_is_done:
+        task.resolution = None
     audit(
         db,
         user,
@@ -356,7 +512,15 @@ def move_task(db, user, task, data):
         origin=origin,
         destination=data.status,
         reason=data.reason,
+        resolution=task.resolution,
+        changes=(
+            [{"field": "resolution", "before": resolution_before, "after": task.resolution}]
+            if resolution_before != task.resolution
+            else []
+        ),
     )
+    if configured and configured.actions:
+        apply_transition_actions(db, user, task, configured.actions, origin, data.status)
 
 
 def validate_references(db, user, task, fields, values):

@@ -26,9 +26,14 @@ async function textContrast(
       const foreground = getComputedStyle(
         document.querySelector(textSelector)!,
       ).color;
-      const background = getComputedStyle(
+      const surfaceStyle = getComputedStyle(
         document.querySelector(surfaceSelector)!,
-      ).backgroundColor;
+      );
+      const background = surfaceStyle.backgroundColor;
+      const gradientColors =
+        surfaceStyle.backgroundImage.match(
+          /rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}/g,
+        ) ?? [];
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = 1;
       const context = canvas.getContext("2d")!;
@@ -47,10 +52,15 @@ async function textContrast(
           channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722
         );
       }
-      const values = [luminance(foreground), luminance(background)].sort(
-        (a, b) => b - a,
+      const backgrounds = gradientColors.length ? gradientColors : [background];
+      return Math.min(
+        ...backgrounds.map((color) => {
+          const values = [luminance(foreground), luminance(color)].sort(
+            (a, b) => b - a,
+          );
+          return (values[0] + 0.05) / (values[1] + 0.05);
+        }),
       );
-      return (values[0] + 0.05) / (values[1] + 0.05);
     },
     { textSelector, surfaceSelector },
   );
@@ -125,7 +135,12 @@ test("fluxo persistente de horas, aprovação e conclusão por perfis", async ({
     .click();
   await expect(admin.getByRole("dialog")).toContainText("960,00");
   await admin.getByLabel("Mover atividade").selectOption("done");
+  const resolutionDialog = admin.getByRole("dialog", { name: "Registrar resolução" });
+  await expect(resolutionDialog).toBeVisible();
+  await resolutionDialog.getByLabel("Resolução").selectOption("Fixed");
+  await resolutionDialog.getByRole("button", { name: "Concluir card" }).click();
   await expect(admin.getByLabel("Mover atividade")).toHaveValue("done");
+  await expect(admin.getByText("Resolução: Corrigido")).toBeVisible();
   await admin.getByRole("button", { name: "Fechar atividade" }).click();
   await admin.getByRole("link", { name: /Relatórios/ }).click();
   await admin.getByLabel("Incluir custos aprovados").check();
@@ -232,22 +247,41 @@ test("arrastar inválido conserva a origem e interface responsiva", async ({
   });
   await page.getByRole("link", { name: /Kanban/ }).click();
   const handle = page.getByRole("button", { name: "Arrastar " + title });
-  const source = await handle.boundingBox();
-  const destination = await page
+  const target = page
     .locator(".kanban-column")
-    .filter({ has: page.getByRole("heading", { name: /Em produção/ }) })
-    .boundingBox();
+    .filter({ has: page.getByRole("heading", { name: /Em produção/ }) });
+  await handle.scrollIntoViewIfNeeded();
+  const source = await handle.boundingBox();
+  const destination = await target.boundingBox();
   expect(source).toBeTruthy();
   expect(destination).toBeTruthy();
+  const viewport = await page.evaluate(() => ({
+    width: innerWidth,
+    height: innerHeight,
+  }));
+  const dropPoint = {
+    x: Math.min(viewport.width - 20, Math.max(20, destination!.x + 80)),
+    y: Math.min(viewport.height - 20, Math.max(20, destination!.y + 100)),
+  };
+  expect(
+    await page.evaluate(
+      ({ x, y }) =>
+        Boolean(
+          document
+            .elementFromPoint(x, y)
+            ?.closest(".kanban-column")
+            ?.querySelector(".kanban-column-title")
+            ?.textContent?.includes("Em produção"),
+        ),
+      dropPoint,
+    ),
+  ).toBe(true);
   await page.mouse.move(
     source!.x + source!.width / 2,
     source!.y + source!.height / 2,
   );
   await page.mouse.down();
-  await page.mouse.move(source!.x + 20, source!.y + 20, { steps: 3 });
-  await page.mouse.move(destination!.x + 80, destination!.y + 100, {
-    steps: 15,
-  });
+  await page.mouse.move(dropPoint.x, dropPoint.y, { steps: 20 });
   await page.mouse.up();
   await expect(page.getByRole("alertdialog")).toContainText("horas previstas");
   await expect(
@@ -725,6 +759,14 @@ test("análise de cards mostra fases ciclos sprint backlog e exportação", asyn
     ).status(),
   ).toBe(201);
   await admin.getByRole("link", { name: "Relatórios", exact: true }).click();
+  await expect(admin).toHaveURL(/\/relatorios$/);
+  const cycleStart = admin.getByRole("combobox", { name: "Início do ciclo", exact: true });
+  const cycleEnd = admin.getByRole("combobox", { name: "Fim do ciclo", exact: true });
+  await expect(cycleStart).toHaveValue("production");
+  await cycleStart.selectOption("todo");
+  await cycleEnd.selectOption("review");
+  await expect(cycleStart).toHaveValue("todo");
+  await expect(cycleEnd).toHaveValue("review");
   await admin.getByRole("button", { name: "Adicionar filtro" }).click();
   await admin.getByLabel("Valor do filtro 1", { exact: true }).fill(title);
   await admin

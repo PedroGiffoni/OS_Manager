@@ -512,9 +512,14 @@ export function Administration({ run }: { run: Run }) {
     queryKey: ["permissions"],
     queryFn: () => api<string[]>("/permissions"),
   });
+  const groups = useQuery({ queryKey: ["user-groups"], queryFn: () => api<any[]>("/user-groups") });
   const [role, setRole] = useState("supplier");
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<any>(null);
+  const [groupEditing, setGroupEditing] = useState<any>(null);
+  const [groupName, setGroupName] = useState("");
+  const [groupDescription, setGroupDescription] = useState("");
+  const [groupMemberIds, setGroupMemberIds] = useState<number[]>([]);
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
@@ -528,6 +533,17 @@ export function Administration({ run }: { run: Run }) {
         });
       setEditing(null);
       setSelected([]);
+    });
+  };
+  const submitGroup = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    run(async () => {
+      let saved: any;
+      const payload = { name: groupName.trim(), description: groupDescription.trim(), active: groupEditing?.active ?? true };
+      if (groupEditing) saved = await api(`/user-groups/${groupEditing.id}`, "PUT", payload);
+      else saved = await api<any>("/user-groups", "POST", payload);
+      await api(`/user-groups/${saved.id}/members`, "PUT", { user_ids: groupMemberIds });
+      setGroupEditing(null); setGroupName(""); setGroupDescription(""); setGroupMemberIds([]);
     });
   };
   return (
@@ -642,6 +658,17 @@ export function Administration({ run }: { run: Run }) {
           </tbody>
         </table>
       </div>
+      <section className="inline-form" aria-labelledby="groups-title">
+        <h3 id="groups-title">Grupos internos</h3>
+        <p>Grupos organizam a visibilidade de visualizações e widgets compartilhados. Contas de fornecedores não podem entrar nesses grupos.</p>
+        <form className="form-grid" onSubmit={submitGroup}>
+          <Label title="Nome do grupo"><input value={groupName} onChange={(event) => setGroupName(event.target.value)} minLength={2} maxLength={100} required placeholder="Ex.: Núcleo de Produto" /></Label>
+          <Label title="Descrição"><input value={groupDescription} onChange={(event) => setGroupDescription(event.target.value)} maxLength={500} /></Label>
+          <Label title="Membros internos"><select multiple value={groupMemberIds.map(String)} onChange={(event) => setGroupMemberIds(Array.from(event.target.selectedOptions, (option) => Number(option.value)))}>{(users.data ?? []).filter((user) => user.role !== "supplier" && user.active).map((user) => <option key={user.id} value={user.id}>{user.username} · {user.role}</option>)}</select></Label>
+          <div className="actions"><button className="primary" disabled={!groupName.trim()}>{groupEditing ? "Salvar grupo" : "Criar grupo"}</button>{groupEditing && <button type="button" onClick={() => { setGroupEditing(null); setGroupName(""); setGroupDescription(""); setGroupMemberIds([]); }}>Cancelar</button>}</div>
+        </form>
+        {groups.isPending ? <Empty>Carregando grupos…</Empty> : groups.isError ? <Empty>{groups.error.message}</Empty> : <div className="planning-list">{groups.data.map((group) => <article className="planning-item" key={group.id}><div><strong>{group.name}</strong><p>{group.description || "Sem descrição"}</p><small>{group.members.map((member: any) => member.username).join(", ") || "Sem membros"} · {group.active ? "Ativo" : "Inativo"}</small></div><div className="actions">{group.active && <button onClick={() => { setGroupEditing(group); setGroupName(group.name); setGroupDescription(group.description); setGroupMemberIds(group.members.map((member: any) => member.id)); }}>Editar</button>}<button className={group.active ? "danger" : ""} onClick={() => run(() => api(`/user-groups/${group.id}`, "PUT", { name: group.name, description: group.description, active: !group.active }))}>{group.active ? "Desativar" : "Reativar"}</button></div></article>)}</div>}
+      </section>
     </section>
   );
 }

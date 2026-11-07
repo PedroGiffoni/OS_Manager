@@ -19,7 +19,7 @@ Os filtros de período selecionam o conjunto de cards conforme os relatórios ex
 
 APIs: GET /api/v1/reports/analysis e GET /api/v1/reports/cards/{id}; exports usam analysis=true. Permissões e escopo são aplicados no servidor, inclusive na consulta direta por ID. Strings em planilhas são texto para impedir interpretação como fórmulas.
 
-Burndown avançado, percentis/previsões e metas institucionais ficam para avaliação posterior. A consulta deriva informações do histórico e pode exigir otimização para volumes institucionais. O SQLite gratuito no Render continua descartável, como autorizado para testes.
+O relatório de sprint mostra uma faixa de sprints restantes usando mediana e percentis de até seis sprints encerradas anteriores; requer ao menos três registros e velocidade conservadora positiva, e não promete data de entrega. Burndown probabilístico, metas institucionais e previsões de data ficam para avaliação posterior. A consulta deriva informações do histórico e pode exigir otimização para volumes institucionais. O SQLite gratuito no Render continua descartável, como autorizado para testes.
 
 ## Validação executada antes da publicação
 

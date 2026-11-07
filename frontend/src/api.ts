@@ -41,6 +41,25 @@ export async function download(path: string) {
   anchor.click();
   URL.revokeObjectURL(url);
 }
+export async function downloadPost(path: string, data: unknown) {
+  const response = await fetch("/api/v1" + path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail?.message ?? "Exportação indisponível.");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "gestao-de-demandas.ics";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
 export async function upload(path: string, file: File) {
   const data = new FormData();
   data.append("file", file);

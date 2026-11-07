@@ -16,19 +16,30 @@ def records(
     starts=None,
     ends=None,
     field_context=None,
+    *,
+    jql="",
 ):
-    rows = list(
-        db.scalars(
-            filtered_tasks(
-                db,
-                user,
-                status=None,
-                sprint_id=sprint_id,
-                supplier_id=None if sprint_id else supplier_id,
-                starts=starts,
-                ends=ends,
-            )
+    task_query = filtered_tasks(
+        db,
+        user,
+        status=None,
+        sprint_id=sprint_id,
+        supplier_id=None if sprint_id else supplier_id,
+        starts=starts,
+        ends=ends,
+    )
+    if jql.strip():
+        from .query_language import apply_query
+
+        task_query = apply_query(
+            task_query,
+            jql,
+            allow_configuration_history=user.role == "admin",
+            actor_user_id=user.id,
+            actor_role=user.role,
         )
+    rows = list(
+        db.scalars(task_query)
     )
     sprint = db.get(Sprint, sprint_id) if sprint_id else None
     links = (

@@ -1,21 +1,151 @@
-import { useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, CalendarRange, Copy, Eye, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
+import { ArrowLeft, ArrowRight, CalendarRange, Copy, Download, Eye, KeyRound, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import type { Account, Sprint, Task } from "./types";
 
-export type ViewLayout = "board" | "table" | "timeline";
+export type ViewLayout = "board" | "table" | "timeline" | "calendar";
 export type SavedProjectView = {
   id: number;
   name: string;
   layout: ViewLayout;
   config: Record<string, any>;
+  shared?: boolean;
+  shared_roles?: string[];
+  shared_group_ids?: number[];
+  owner_id?: number;
   position: number;
 };
 export type ProjectColumn = {
   key: string;
   title: string;
   is_system: boolean;
+  category: "todo" | "in_progress" | "done";
   view_order: number;
+  wip_limit?: number | null;
 };
+export type BoardQuickFilter = { id: string; label: string; query: string };
+export type TimelineDependency = { id: number; fromTaskId: number; toTaskId: number; type: string };
+
+export function timelineDependencies(tasks: Task[]): TimelineDependency[] {
+  const visible = new Set(tasks.map((task) => task.id));
+  const seen = new Set<number>();
+  const result: TimelineDependency[] = [];
+  for (const task of tasks) for (const link of task.links ?? []) {
+    if (seen.has(link.id) || !visible.has(link.task_id)) continue;
+    seen.add(link.id);
+    result.push({
+      id: link.id,
+      fromTaskId: link.direction === "outgoing" ? task.id : link.task_id,
+      toTaskId: link.direction === "outgoing" ? link.task_id : task.id,
+      type: link.type,
+    });
+  }
+  return result;
+}
+export const boardQuickFilters: BoardQuickFilter[] = [
+  { id: "overdue", label: "Atrasadas", query: "is:overdue" },
+  { id: "no-supplier", label: "Sem fornecedor", query: "no:supplier" },
+  { id: "no-sprint", label: "Sem sprint", query: "no:sprint" },
+  { id: "pending-approval", label: "Aprovação pendente", query: "approval:pending" },
+];
+
+const filterKeys = new Set([
+  "status", "state", "supplier", "fornecedor", "sprint", "priority", "label", "labels",
+  "approval", "title", "due", "date", "created", "has", "no", "is",
+]);
+export function isQuickFilterQueryAllowed(query: string): boolean {
+  if (!query.trim() || query.length > 300) return false;
+  const parts = tokens(query);
+  if (!parts.length) return false;
+  return parts.every((raw) => {
+    const token = raw.startsWith("-") ? raw.slice(1) : raw;
+    if (/[()]/.test(token) || ["and", "or", "not", "order", "by"].includes(token.toLowerCase())) return false;
+    const colon = token.indexOf(":");
+    if (colon < 0) return !/[=<>]/.test(token);
+    const key = token.slice(0, colon).toLowerCase();
+    const value = token.slice(colon + 1);
+    return value.length > 0 && (filterKeys.has(key) || key.startsWith("field."));
+  });
+}
+
+export function QuickFilters({
+  filters,
+  active,
+  onChange,
+  onFiltersChange,
+}: {
+  filters: BoardQuickFilter[];
+  active: string[];
+  onChange: (next: string[]) => void;
+  onFiltersChange: (next: BoardQuickFilter[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [label, setLabel] = useState("");
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+  const toggle = (id: string) =>
+    onChange(
+      active.includes(id) ? active.filter((item) => item !== id) : [...active, id],
+    );
+  return (
+    <nav className="project-quick-filters" aria-label="Filtros rápidos">
+      <strong>Filtros rápidos</strong>
+      {filters.map((filter) => (
+        <button
+          key={filter.id}
+          type="button"
+          aria-pressed={active.includes(filter.id)}
+          className={active.includes(filter.id) ? "active" : ""}
+          onClick={() => toggle(filter.id)}
+        >
+          {filter.label}
+        </button>
+      ))}
+      <button type="button" onClick={() => { setEditing((value) => !value); setEditingId(null); setLabel(""); setQuery(""); setError(""); }}>
+        {editing ? "Fechar configuração" : "Configurar filtros"}
+      </button>
+      {active.length > 0 && (
+        <button type="button" className="project-quick-filter-clear" onClick={() => onChange([])}>
+          Limpar
+        </button>
+      )}
+      {editing && (
+        <div className="project-quick-filter-editor">
+          <h4>Configurar filtros rápidos</h4>
+          <ul>
+            {filters.map((filter) => (
+              <li key={filter.id}>
+                <span><strong>{filter.label}</strong><small>{filter.query}</small></span>
+                <button type="button" onClick={() => { setEditingId(filter.id); setLabel(filter.label); setQuery(filter.query); setError(""); }}>Editar</button>
+                <button type="button" aria-label={`Remover filtro ${filter.label}`} onClick={() => { onFiltersChange(filters.filter((item) => item.id !== filter.id)); onChange(active.filter((id) => id !== filter.id)); }}>Remover</button>
+              </li>
+            ))}
+          </ul>
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            if (!label.trim()) { setError("Informe um nome para o filtro."); return; }
+            if (!isQuickFilterQueryAllowed(query)) { setError("Use a sintaxe simples do quadro, como status:review ou is:overdue."); return; }
+            if (!editingId && filters.length >= 20) { setError("Cada visualização pode ter até 20 filtros rápidos."); return; }
+            const id = editingId ?? `quick-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+            const next = editingId
+              ? filters.map((filter) => filter.id === editingId ? { id, label: label.trim(), query: query.trim() } : filter)
+              : [...filters, { id, label: label.trim(), query: query.trim() }];
+            onFiltersChange(next);
+            setEditingId(null); setLabel(""); setQuery(""); setError("");
+          }}>
+            <label>Nome<input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={40} /></label>
+            <label>Consulta<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={'Ex.: status:review no:sprint'} maxLength={300} /></label>
+            <small>As condições são combinadas (AND). Exemplos: <code>is:overdue</code>, <code>approval:pending</code>, <code>supplier:@me</code>.</small>
+            {error && <p role="alert">{error}</p>}
+            <button type="submit">{editingId ? "Salvar filtro" : "Adicionar filtro"}</button>
+            {editingId && <button type="button" onClick={() => { setEditingId(null); setLabel(""); setQuery(""); setError(""); }}>Cancelar edição</button>}
+          </form>
+        </div>
+      )}
+    </nav>
+  );
+}
 
 const tokens = (query: string) =>
   query.match(/-?[\w.-]+:(?:"[^"]*"|'[^']*'|[^\s]+)|"[^"]*"|'[^']*'|\S+/g) ?? [];
@@ -107,35 +237,40 @@ export function filterBoardTasks(
 }
 
 export function ViewTools({
-  views, activeId, layout, query, groupBy, sortBy, zoom, fields, visibleFields, sliceBy, sliceValue, sliceOptions, sumBy, descending, financial,
-  onSelect, onLayout, onQuery, onGroup, onSort, onZoom, onToggleField, onMoveField, onSliceBy, onSliceValue, onSum, onDirection, onRename, onMoveView,
+  views, activeId, currentUserId, layout, query, advancedQuery, groupBy, sortBy, zoom, fields, visibleFields, sliceBy, sliceValue, sliceOptions, sumBy, descending, financial, shared, sharedRoles, sharedGroupIds, groups, canShare,
+  onSelect, onLayout, onQuery, onAdvancedQuery, onGroup, onSort, onZoom, onToggleField, onMoveField, onSliceBy, onSliceValue, onSum, onDirection, onRename, onMoveView, onShared, onSharedRoles, onSharedGroupIds,
   onSave, onDuplicate, onDelete,
 }: {
-  views: SavedProjectView[]; activeId: number | null; layout: ViewLayout; query: string;
+  views: SavedProjectView[]; activeId: number | null; currentUserId: number; layout: ViewLayout; query: string; advancedQuery: string;
   groupBy: string; sortBy: string; zoom: "month" | "quarter" | "year";
-  sliceBy: string; sliceValue: string; sliceOptions: { value: string; label: string }[]; sumBy: string; descending: boolean; financial: boolean;
+  sliceBy: string; sliceValue: string; sliceOptions: { value: string; label: string }[]; sumBy: string; descending: boolean; financial: boolean; shared: boolean; sharedRoles: string[]; sharedGroupIds: number[]; groups: { id: number; name: string }[]; canShare: boolean;
   fields: { key: string; label: string }[]; visibleFields: string[];
   onMoveField: (key: string, direction: number) => void;
   onSelect: (view: SavedProjectView | null) => void; onLayout: (value: ViewLayout) => void;
-  onQuery: (value: string) => void; onGroup: (value: string) => void; onSort: (value: string) => void;
+  onQuery: (value: string) => void; onAdvancedQuery: (value: string) => void; onGroup: (value: string) => void; onSort: (value: string) => void;
   onZoom: (value: "month" | "quarter" | "year") => void; onToggleField: (value: string) => void;
   onSliceBy: (value: string) => void; onSliceValue: (value: string) => void; onSum: (value: string) => void; onDirection: () => void;
+  onShared: (value: boolean) => void;
+  onSharedRoles: (value: string[]) => void;
+  onSharedGroupIds: (value: number[]) => void;
   onRename: () => void; onMoveView: (identity: number, direction: number) => void;
   onSave: (name?: string) => void; onDuplicate: () => void; onDelete: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [newName, setNewName] = useState("");
+  const activeOwned = views.find((view) => view.id === activeId)?.owner_id === currentUserId;
+  const ownedViews = views.filter((view) => view.owner_id === currentUserId);
   return (
     <section className="project-view-tools" aria-label="Visualizações e filtros">
       <div className="project-view-heading">
         <button className="project-view-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
           <Eye size={18} aria-hidden="true" /> Views <span>{open ? "−" : "+"}</span>
         </button>
-        {views.map((view, index) => (
+        {views.map((view) => (
           <div className="view-tab-wrap" key={view.id}>
             <button className={activeId === view.id ? "view-tab active" : "view-tab"} onClick={() => onSelect(view)}>{view.name}</button>
-            <button className="view-tab-move" aria-label={`Mover visualização ${view.name} para a esquerda`} disabled={index === 0} onClick={() => onMoveView(view.id, -1)}><ArrowLeft size={13} /></button>
-            <button className="view-tab-move" aria-label={`Mover visualização ${view.name} para a direita`} disabled={index === views.length - 1} onClick={() => onMoveView(view.id, 1)}><ArrowRight size={13} /></button>
+            {view.owner_id === currentUserId && <><button className="view-tab-move" aria-label={`Mover visualização ${view.name} para a esquerda`} disabled={ownedViews.findIndex((item) => item.id === view.id) === 0} onClick={() => onMoveView(view.id, -1)}><ArrowLeft size={13} /></button>
+            <button className="view-tab-move" aria-label={`Mover visualização ${view.name} para a direita`} disabled={ownedViews.findIndex((item) => item.id === view.id) === ownedViews.length - 1} onClick={() => onMoveView(view.id, 1)}><ArrowRight size={13} /></button></>}
           </div>
         ))}
         {activeId !== null && <button className="view-tab" onClick={() => onSelect(null)}>+ Quadro padrão</button>}
@@ -144,15 +279,19 @@ export function ViewTools({
         <div className="project-view-controls">
           <label>Visualização
             <select value={layout} onChange={(event) => onLayout(event.target.value as ViewLayout)}>
-              <option value="board">Quadro</option><option value="table">Tabela</option><option value="timeline">Linha do tempo</option>
+              <option value="board">Quadro</option><option value="table">Tabela</option><option value="timeline">Linha do tempo</option><option value="calendar">Calendário</option>
             </select>
           </label>
           <label className="project-filter-search">Filtros
             <input value={query} onChange={(event) => onQuery(event.target.value)} placeholder={'Ex.: status:"Em produção" supplier:3 no:due'} />
           </label>
+          <label className="project-filter-search">Consulta avançada (servidor)
+            <input value={advancedQuery} onChange={(event) => onAdvancedQuery(event.target.value)} placeholder={'status = "review" OR (type = bug AND priority <= 5)'} />
+          </label>
+          <small className="project-query-help">Use AND/OR, parênteses, comparações, IN/NOT IN, IS EMPTY e ORDER BY. <code>statusCategory</code> aceita To Do, In Progress e Done; <code>resolutiondate</code> filtra e ordena pela última conclusão auditada, ficando vazio quando o card está reaberto. A busca respeita seu acesso e pode ser salva na visualização.</small>
           <label>Agrupar por
             <select value={groupBy} onChange={(event) => onGroup(event.target.value)}>
-              <option value="">Sem agrupamento</option><option value="status">Status</option><option value="supplier">Fornecedor</option><option value="sprint">Sprint</option><option value="priority">Prioridade</option><option value="approval">Aprovação</option>
+              <option value="">Sem agrupamento</option><option value="status">Status</option><option value="supplier">Fornecedor</option><option value="sprint">Sprint</option><option value="priority">Prioridade</option><option value="approval">Aprovação</option><option value="parent">Card pai</option><option value="work_type">Tipo</option>
             </select>
           </label>
           <label>Ordenar por
@@ -183,11 +322,12 @@ export function ViewTools({
             {visibleFields.includes(field.key) && <span><button type="button" aria-label={`Mover ${field.label} para antes`} disabled={visibleFields.indexOf(field.key) === 0} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMoveField(field.key, -1); }}><ArrowLeft size={12} /></button><button type="button" aria-label={`Mover ${field.label} para depois`} disabled={visibleFields.indexOf(field.key) === visibleFields.length - 1} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMoveField(field.key, 1); }}><ArrowRight size={12} /></button></span>}
           </label>)}</div>
         </details>
-        <p className="project-filter-help">Filtros: texto livre, status, supplier, sprint, priority, label, approval, due, created, has/no e field.ID. Use vírgulas para opções alternativas e “-” para excluir. Ex.: <code>status:review,-label:urgente,due:2026-11-01..2026-12-31</code></p>
+        <p className="project-filter-help">Filtros rápidos: texto livre, status, supplier, sprint, priority, label, approval, due, created, has/no e field.ID. Use vírgulas para opções alternativas e “-” para excluir. A consulta avançada usa JQL reduzida no servidor e pode ser salva em uma visualização compartilhada. Ex.: <code>status:review,-label:urgente,due:2026-11-01..2026-12-31</code></p>
         <div className="project-view-save">
           <label aria-label="Nome da visualização"><input value={newName} onChange={(event) => setNewName(event.target.value)} placeholder="Nome da nova visualização" /></label>
+          {canShare && <div className="share-view-option"><label><input type="checkbox" checked={shared} onChange={(event) => onShared(event.target.checked)} /> Compartilhar visualização</label>{shared && <div className="share-role-options" aria-label="Públicos com acesso"><span>Perfis internos:</span>{(["admin", "manager", "internal"] as const).map((role) => <label key={role}><input type="checkbox" checked={sharedRoles.includes(role)} onChange={(event) => onSharedRoles(event.target.checked ? [...sharedRoles, role] : sharedRoles.filter((item) => item !== role))} />{{admin:"Administradores",manager:"Gestores",internal:"Equipe interna"}[role]}</label>)}{groups.length > 0 && <><span>Grupos:</span>{groups.map((group) => <label key={group.id}><input type="checkbox" checked={sharedGroupIds.includes(group.id)} onChange={(event) => onSharedGroupIds(event.target.checked ? [...sharedGroupIds, group.id] : sharedGroupIds.filter((id) => id !== group.id))} />{group.name}</label>)}</>}</div>}</div>}
           <button onClick={() => { onSave(newName.trim() || undefined); setNewName(""); }}><Plus size={15} /> Salvar como nova</button>
-          {activeId !== null && <><button onClick={() => onSave()}><Save size={15} /> Salvar alterações</button><button onClick={onRename}><Pencil size={15} /> Renomear</button><button onClick={onDuplicate}><Copy size={15} /> Duplicar</button><button className="danger" onClick={onDelete}><Trash2 size={15} /> Excluir</button></>}
+          {activeId !== null && <>{activeOwned && <><button onClick={() => onSave()}><Save size={15} /> Salvar alterações</button><button onClick={onRename}><Pencil size={15} /> Renomear</button><button className="danger" onClick={onDelete}><Trash2 size={15} /> Excluir</button></>}<button onClick={onDuplicate}><Copy size={15} /> Duplicar</button></>}
         </div>
       </>}
     </section>
@@ -207,6 +347,14 @@ export function ProjectTable({ tasks, columns, suppliers, fields, visibleFields,
     if (key === "due") return task.due ?? "Sem prazo";
     if (key === "priority") return String(task.priority);
     if (key === "approval") return task.approval;
+    if (key === "parent") {
+      if (!task.parent_id) return "Sem card pai";
+      const parent = tasks.find((row) => row.id === task.parent_id);
+      return parent ? `OS-${parent.id} · ${parent.title}` : `OS-${task.parent_id}`;
+    }
+    if (key === "work_type") {
+      return ({ epic: "Épico", story: "História", task: "Tarefa", bug: "Bug", subtask: "Subtarefa" } as Record<string, string>)[task.work_type ?? "task"] ?? "Tarefa";
+    }
     if (key === "cost_cents") return task.cost_cents == null ? "—" : new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(task.cost_cents / 100);
     if (key === "description") return task.description || "—";
     if (key === "created_at") return task.created_at?.slice(0, 10) ?? "—";
@@ -230,8 +378,10 @@ export function TimelineView({ tasks, columns, suppliers, sprints, zoom, account
   tasks: Task[]; columns: ProjectColumn[]; suppliers: { id: number; name: string }[]; zoom: "month" | "quarter" | "year";
   sprints: Sprint[]; account: Account; saveSchedule: (task: Task, plannedStart: string, due: string) => void; open: (task: Task) => void;
 }) {
+  const timelineRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ taskId: number; startX: number; trackWidth: number; deltaDays: number } | null>(null);
   const [dragPreview, setDragPreview] = useState<{ taskId: number; deltaDays: number } | null>(null);
+  const [dependencyPaths, setDependencyPaths] = useState<{ id: number; type: string; path: string; label: string }[]>([]);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const start = new Date(today.getFullYear(), today.getMonth(), 1);
   if (zoom === "quarter") start.setMonth(Math.floor(start.getMonth() / 3) * 3);
@@ -244,7 +394,56 @@ export function TimelineView({ tasks, columns, suppliers, sprints, zoom, account
   const startIso = localDate(start);
   const endIso = localDate(end);
   const canSchedule = account.permissions.includes("create_tasks") || account.role === "admin";
-  return <div className="timeline-view">
+  const dependencies = timelineDependencies(tasks);
+  const dependencyKey = JSON.stringify(dependencies);
+  const taskLayoutKey = tasks.map((task) => `${task.id}:${task.planned_start ?? ""}:${task.due ?? ""}`).join("|");
+  useLayoutEffect(() => {
+    const root = timelineRef.current;
+    const currentDependencies: TimelineDependency[] = JSON.parse(dependencyKey);
+    if (!root || !currentDependencies.length) { setDependencyPaths([]); return; }
+    const measure = () => {
+      const rootRect = root.getBoundingClientRect();
+      const paths = currentDependencies.flatMap((link) => {
+        const from = root.querySelector<HTMLElement>(`[data-timeline-bar-id="${link.fromTaskId}"]`);
+        const to = root.querySelector<HTMLElement>(`[data-timeline-bar-id="${link.toTaskId}"]`);
+        if (!from || !to) return [];
+        const fromRect = from.getBoundingClientRect();
+        const toRect = to.getBoundingClientRect();
+        const fromBeforeTo = fromRect.left <= toRect.left;
+        const startX = (fromBeforeTo ? fromRect.right : fromRect.left) - rootRect.left + root.scrollLeft;
+        const endX = (fromBeforeTo ? toRect.left : toRect.right) - rootRect.left + root.scrollLeft;
+        const startY = fromRect.top - rootRect.top + root.scrollTop + fromRect.height / 2;
+        const endY = toRect.top - rootRect.top + root.scrollTop + toRect.height / 2;
+        const curve = Math.max(24, Math.abs(endX - startX) * 0.4);
+        const path = `M ${startX} ${startY} C ${startX + curve} ${startY}, ${endX - curve} ${endY}, ${endX} ${endY}`;
+        return [{ id: link.id, type: link.type, path, label: `OS-${link.fromTaskId} ${link.type === "blocks" ? "bloqueia" : link.type === "duplicates" ? "duplica" : "relaciona-se com"} OS-${link.toTaskId}` }];
+      });
+      setDependencyPaths(paths);
+    };
+    let frame = 0;
+    const cancelMeasure = () => {
+      if (typeof window.cancelAnimationFrame === "function") window.cancelAnimationFrame(frame);
+      else window.clearTimeout(frame);
+    };
+    const scheduleMeasure = () => {
+      cancelMeasure();
+      frame = typeof window.requestAnimationFrame === "function"
+        ? window.requestAnimationFrame(measure)
+        : window.setTimeout(measure, 0);
+    };
+    scheduleMeasure();
+    root.addEventListener("scroll", scheduleMeasure, { passive: true });
+    window.addEventListener("resize", scheduleMeasure);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
+    observer?.observe(root);
+    return () => {
+      cancelMeasure();
+      root.removeEventListener("scroll", scheduleMeasure);
+      window.removeEventListener("resize", scheduleMeasure);
+      observer?.disconnect();
+    };
+  }, [dependencyKey, taskLayoutKey, zoom, dragPreview]);
+  return <div ref={timelineRef} className="timeline-view">
     <div className="timeline-header"><strong>Atividade</strong><div><CalendarRange size={16} /> {start.toLocaleDateString("pt-BR")} — {end.toLocaleDateString("pt-BR")} · {zoom === "month" ? "Mês" : zoom === "quarter" ? "Trimestre" : "Ano"}</div></div>
     {tasks.map((task) => {
       const planned = task.planned_start ?? task.created_at?.slice(0, 10) ?? startIso;
@@ -261,7 +460,7 @@ export function TimelineView({ tasks, columns, suppliers, sprints, zoom, account
         </div>
         <div className="timeline-track" aria-label={`Período planejado de ${task.title}`}>
           {sprints.flatMap((sprint) => [[sprint.starts, `${sprint.name} · início`], [sprint.ends, `${sprint.name} · término`]] as [string, string][]).filter(([date]) => date >= startIso && date <= endIso).map(([date, label]) => <span key={`${task.id}-${label}`} className="timeline-marker" style={{ left: `${((parseLocalDate(date).getTime() - start.getTime()) / 86400000 / days) * 100}%` }} title={`${label}: ${date}`} />)}
-          <div className={task.status === "done" ? "timeline-bar done" : "timeline-bar"} style={{ left: `${left + shifted}%`, width: `${width}%` }} title={`${planned} até ${due}`} onPointerDown={(event) => {
+          <div data-timeline-bar-id={task.id} className={task.status === "done" ? "timeline-bar done" : "timeline-bar"} style={{ left: `${left + shifted}%`, width: `${width}%` }} title={`${planned} até ${due}`} onPointerDown={(event) => {
             if (!canSchedule || task.status === "done") return;
             const track = event.currentTarget.parentElement;
             if (!track) return;
@@ -283,6 +482,96 @@ export function TimelineView({ tasks, columns, suppliers, sprints, zoom, account
         </div>
       </div>;
     })}
+    {dependencyPaths.length > 0 && <svg className="timeline-dependency-overlay" aria-label="Dependências entre cards" width={timelineRef.current?.scrollWidth ?? 0} height={timelineRef.current?.scrollHeight ?? 0} viewBox={`0 0 ${timelineRef.current?.scrollWidth ?? 1} ${timelineRef.current?.scrollHeight ?? 1}`}>
+      <defs><marker id="timeline-blocks-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" /></marker><marker id="timeline-duplicates-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M 0 0 L 8 4 L 0 8 z" /></marker></defs>
+      {dependencyPaths.map((edge) => <path key={edge.id} className={`timeline-dependency ${edge.type}`} d={edge.path} markerEnd={edge.type === "blocks" ? "url(#timeline-blocks-arrow)" : edge.type === "duplicates" ? "url(#timeline-duplicates-arrow)" : undefined}><title>{edge.label}</title></path>)}
+    </svg>}
     {!tasks.length && <p className="empty">Nenhum card corresponde aos filtros.</p>}
   </div>;
+}
+
+export function CalendarView({ tasks, open, canSchedule = false, saveSchedule, onExportCalendar, calendarFeedActive, calendarFeedLoading = false, calendarFeedUrl, calendarFeedSecret, onCreateCalendarFeed, onRevokeCalendarFeed, onCopyCalendarFeedUrl, onCopyCalendarFeedSecret }: {
+  tasks: Task[];
+  open: (task: Task) => void;
+  canSchedule?: boolean;
+  saveSchedule?: (task: Task, plannedStart: string, due: string) => void;
+  onExportCalendar?: () => void;
+  calendarFeedActive?: boolean;
+  calendarFeedLoading?: boolean;
+  calendarFeedUrl?: string;
+  calendarFeedSecret?: string;
+  onCreateCalendarFeed?: () => void;
+  onRevokeCalendarFeed?: () => void;
+  onCopyCalendarFeedUrl?: () => void;
+  onCopyCalendarFeedSecret?: () => void;
+}) {
+  const [month, setMonth] = useState(() => {
+    const value = new Date();
+    return new Date(value.getFullYear(), value.getMonth(), 1);
+  });
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const start = new Date(firstDay);
+  start.setDate(firstDay.getDate() - mondayOffset);
+  const days = Array.from({ length: 42 }, (_, index) => {
+    const value = new Date(start);
+    value.setDate(start.getDate() + index);
+    return value;
+  });
+  const byDate = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!task.due) continue;
+    byDate.set(task.due.slice(0, 10), [...(byDate.get(task.due.slice(0, 10)) ?? []), task]);
+  }
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(month);
+  const dropTask = (event: DragEvent<HTMLDivElement>, date: string) => {
+    event.preventDefault();
+    if (!canSchedule || !saveSchedule) return;
+    const identity = Number(event.dataTransfer.getData("text/plain"));
+    const task = tasks.find((row) => row.id === identity);
+    if (!task || task.status === "done") return;
+    const startDate = task.planned_start && task.planned_start <= date ? task.planned_start : task.planned_start ? date : "";
+    if (task.due !== date || task.planned_start !== startDate) saveSchedule(task, startDate, date);
+  };
+  return <section className="project-calendar" aria-label={`Calendário de ${label}`}>
+    <div className="calendar-toolbar">
+      <h3>{label}</h3>
+      <div><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>Anterior</button><button onClick={() => { const now = new Date(); setMonth(new Date(now.getFullYear(), now.getMonth(), 1)); }}>Hoje</button><button onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>Próximo</button>{onExportCalendar && <button type="button" onClick={onExportCalendar}><Download size={15} /> Exportar .ics</button>}</div>
+    </div>
+    {onCreateCalendarFeed && <section className="calendar-feed panel" aria-label="Assinatura de calendário">
+      <div><strong>Sincronizar com outro calendário</strong><p className="muted">Use uma assinatura iCalendar somente leitura. Os eventos são atualizados conforme seus cards com prazo mudam.</p></div>
+      <div className="calendar-feed-actions">
+        <button type="button" disabled={calendarFeedLoading} onClick={onCreateCalendarFeed}><KeyRound size={15} />{calendarFeedLoading ? "Verificando feed…" : calendarFeedActive ? "Gerar nova chave" : "Criar assinatura"}</button>
+        {calendarFeedActive && onRevokeCalendarFeed && <button type="button" className="danger" onClick={onRevokeCalendarFeed}>Revogar assinatura</button>}
+      </div>
+      {calendarFeedActive && <p className="calendar-feed-help">Feed ativo. O endereço não contém a chave; informe o usuário <code>calendar</code> e a chave como senha nas configurações do calendário. Se perdeu a chave, gere outra para substituir a anterior.</p>}
+      {calendarFeedSecret && <div className="calendar-feed-credentials">
+        <label>Endereço do feed<input readOnly value={calendarFeedUrl ?? ""} /></label>
+        <button type="button" onClick={onCopyCalendarFeedUrl}><Copy size={14} />Copiar endereço</button>
+        <label>Chave de acesso — exibida somente agora<input readOnly value={calendarFeedSecret} /></label>
+        <button type="button" onClick={onCopyCalendarFeedSecret}><Copy size={14} />Copiar chave</button>
+        <small>Guarde a chave como uma senha. Ela não pode ser recuperada; você pode gerar uma nova a qualquer momento.</small>
+      </div>}
+    </section>}
+    {canSchedule && <p className="muted">Arraste um card para outro dia para ajustar o prazo. Pelo teclado, abra o card e edite o cronograma.</p>}
+    <div className="calendar-content">
+    <div className="calendar-grid">
+      {["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map((day) => <strong key={day}>{day}</strong>)}
+      {days.map((day) => {
+        const key = localDate(day);
+        return <div className={day.getMonth() === month.getMonth() ? "calendar-day" : "calendar-day outside"} key={key} data-date={key} aria-label={canSchedule ? `Soltar card no dia ${key}` : undefined} onDragOver={canSchedule ? (event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; } : undefined} onDrop={canSchedule ? (event) => dropTask(event, key) : undefined}>
+          <time dateTime={key}>{day.getDate()}</time>
+          {(byDate.get(key) ?? []).map((task) => <button className="calendar-task" key={task.id} title={task.title} draggable={canSchedule && task.status !== "done"} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); }} onClick={() => open(task)}>OS-{task.id} · {task.title}</button>)}
+        </div>;
+      })}
+    </div>
+    {canSchedule && <aside className="calendar-unplanned" aria-label="Cards sem prazo">
+      <h4>Sem prazo</h4>
+      <p className="muted">Arraste um card para o dia desejado.</p>
+      {tasks.filter((task) => !task.due).map((task) => <button key={task.id} className="calendar-task" title={task.title} draggable={task.status !== "done"} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(task.id)); }} onClick={() => open(task)}>OS-{task.id} · {task.title}</button>)}
+      {!tasks.some((task) => !task.due) && <small className="muted">Nenhum card sem prazo.</small>}
+    </aside>}
+    </div>
+    {!tasks.some((task) => task.due?.slice(0, 7) === localDate(month).slice(0, 7)) && <p className="calendar-empty">Nenhum card com prazo neste mês.</p>}
+  </section>;
 }

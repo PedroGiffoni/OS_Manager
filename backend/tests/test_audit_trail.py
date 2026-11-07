@@ -1,5 +1,20 @@
 from .test_acceptance import P, create, review, hours
 from .test_report_filters import schema
+from app.audit_trail import visible_details
+from types import SimpleNamespace
+
+
+def test_audit_custom_field_changes_keep_schema_visibility_when_field_is_removed():
+    details = {"changes": [{
+        "field": "restricted", "before": "private before", "after": "private after",
+        "visible_to": ["admin"],
+    }]}
+    visible = visible_details(details, SimpleNamespace(role="supplier"), False, {})
+    assert visible["changes"] == []
+    admin = visible_details(details, SimpleNamespace(role="admin"), True, {})
+    assert admin["changes"] == [{
+        "field": "restricted", "before": "private before", "after": "private after",
+    }]
 
 
 def history(clients, task, user="admin"):

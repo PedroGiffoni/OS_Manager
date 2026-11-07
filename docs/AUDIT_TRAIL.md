@@ -17,7 +17,7 @@ A ação e sua auditoria são confirmadas na mesma transação. Requisições re
 
 ## Consulta e proteção
 
-Aba Histórico do card: linha do tempo com autor, instante e comparação. GET /api/v1/audit?entity=task&identity=ID permanece restrito a usuários internos. Fornecedores continuam podendo preencher horas, mas não recebem acesso à auditoria interna nem aos relatórios.
+Aba Histórico do card: linha do tempo com autor, instante e comparação por evento. Usuários internos também podem selecionar dois registros e ver a diferença líquida entre eles (valores inicial/final e etapa), incluindo mudanças revertidas dentro do intervalo somente quando o resultado final for diferente. A comparação usa exclusivamente os detalhes devolvidos pela API com as permissões do usuário. GET /api/v1/audit?entity=task&identity=ID permanece restrito a usuários internos. Fornecedores continuam podendo preencher horas, mas não recebem acesso à auditoria interna nem aos relatórios.
 
 Campos privados respeitam tanto a visibilidade registrada no evento como a configuração atual. Informações financeiras seguem permissões próprias, inclusive em estruturas aninhadas. Textos são exibidos como conteúdo React, sem HTML executável. Não existem endpoints para alterar ou excluir eventos de auditoria.
 
@@ -25,6 +25,6 @@ A comparação com GitHub é uma referência de experiência: autoria, sequênci
 
 ## Histórico anterior e infraestrutura
 
-Eventos anteriores permanecem intactos. Comparações que não foram armazenadas na época são apresentadas como não registradas; não se inventam valores retroativos. As versões de horas já existentes na tabela task_hours são preservadas. Não foi necessário alterar o esquema físico: detalhes usam JSON e tabelas versionadas existentes.
+Eventos anteriores permanecem intactos. A comparação entre registros agrega diferenças auditadas; eventos antigos sem detalhes de alteração não permitem reconstruir campos que não foram registrados e são apresentados como sem diferença registrada. Não se inventam valores retroativos. As versões de horas já existentes na tabela task_hours são preservadas. Não foi necessário alterar o esquema físico: detalhes usam JSON e tabelas versionadas existentes.
 
 O histórico reside no mesmo SQLite da aplicação. Em execução local/Compose com volume ele acompanha a persistência do banco. No Render Free configurado para testes descartáveis, banco e histórico podem desaparecer em suspensão, reinício ou redeploy. Persistência institucional e retenção exigem uma decisão de infraestrutura e homologação; não estão garantidas pelo ambiente gratuito atual.

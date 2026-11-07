@@ -25,6 +25,7 @@ def report_fields(sprint_id: int | None = None, user=Depends(current_user), db=D
 @router.get("/preview")
 def preview(
     field_filters: str = Query(default="[]", max_length=12000),
+    jql: str = Query(default="", max_length=1000),
     status: str | None = None,
     sprint_id: int | None = None,
     supplier_id: int | None = None,
@@ -36,7 +37,9 @@ def preview(
     db=Depends(get_db),
 ):
     context = filter_context(db, user, field_filters, sprint_id)
-    rows = records(db, user, status, sprint_id, supplier_id, starts, ends, context)
+    rows = records(
+        db, user, status, sprint_id, supplier_id, starts, ends, context, jql=jql
+    )
     keys = [
         "id",
         "title",
@@ -61,6 +64,7 @@ def preview(
 @router.get("/analysis")
 def analysis(
     field_filters: str = Query(default="[]", max_length=12000),
+    jql: str = Query(default="", max_length=1000),
     status: str | None = None,
     sprint_id: int | None = None,
     supplier_id: int | None = None,
@@ -85,6 +89,7 @@ def analysis(
         user,
         {
             "field_filters": field_filters,
+            "jql": jql,
             "status": status,
             "sprint_id": sprint_id,
             "supplier_id": supplier_id,

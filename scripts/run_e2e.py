@@ -26,7 +26,7 @@ with tempfile.TemporaryDirectory(prefix="os-manager-e2e-") as temp:
                     if server.poll() is not None:
                         raise RuntimeError("Backend E2E não iniciou; consulte o teste de migração.")
                     time.sleep(.2)
-            command = ["cmd.exe", "/d", "/c", "npm.cmd", "run", "test:e2e"] if os.name == "nt" else ["npm", "run", "test:e2e"]
+            command = ["cmd.exe", "/d", "/c", "npm.cmd", "run", "test:e2e", "--", *sys.argv[1:]] if os.name == "nt" else ["npm", "run", "test:e2e", "--", *sys.argv[1:]]
             result = subprocess.run(command, cwd=root/"frontend", env=env, timeout=240)
         finally:
             server.terminate()

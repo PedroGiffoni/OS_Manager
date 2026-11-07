@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Comparativo funcional entre o Gestão de Demandas e o Jira Software Cloud.">
+  <title>Gestão de Demandas × Jira | Comparativo funcional</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17233d;
+      --muted: #5c6880;
+      --blue: #1646a0;
+      --blue-2: #3569d4;
+      --blue-pale: #edf3ff;
+      --line: #dce3ef;
+      --surface: #ffffff;
+      --canvas: #f4f7fc;
+      --green: #14764d;
+      --green-bg: #e8f7ef;
+      --amber: #8a5b00;
+      --amber-bg: #fff4d8;
+      --red: #a3393b;
+      --red-bg: #fff0ef;
+      --shadow: 0 16px 48px rgba(28, 50, 91, .09);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: #092d71; }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 64px 24px 58px;
+      color: white;
+      background: linear-gradient(125deg, #123c91 0%, #2459bd 55%, #547fe0 100%);
+    }
+    .hero::before, .hero::after {
+      position: absolute;
+      content: "";
+      pointer-events: none;
+      border: 1px solid rgba(255,255,255,.13);
+      transform: rotate(-12deg);
+    }
+    .hero::before { width: 540px; height: 540px; right: -90px; top: -320px; border-radius: 42px; }
+    .hero::after { width: 370px; height: 370px; right: 95px; bottom: -315px; border-radius: 32px; }
+    .hero-inner, main, footer { width: min(1120px, calc(100% - 40px)); margin-inline: auto; }
+    .eyebrow { margin: 0 0 14px; font-size: .76rem; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; opacity: .82; }
+    h1 { max-width: 830px; margin: 0; font-size: clamp(2.2rem, 5vw, 4.25rem); line-height: 1.05; letter-spacing: -.045em; }
+    .hero p.lead { max-width: 770px; margin: 22px 0 0; color: rgba(255,255,255,.9); font-size: clamp(1rem, 2vw, 1.18rem); }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+    .hero-meta span { padding: 7px 11px; border: 1px solid rgba(255,255,255,.24); border-radius: 999px; background: rgba(255,255,255,.1); font-size: .82rem; }
+    main { padding-block: 30px 70px; }
+    .intro-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; margin: 0 0 28px; }
+    .panel { padding: 22px 24px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+    .panel h2, .section-heading h2 { margin: 0 0 10px; font-size: 1.15rem; letter-spacing: -.02em; }
+    .panel p { margin: 0; color: var(--muted); }
+    .scope { border-left: 4px solid var(--blue-2); }
+    .scope strong { color: var(--ink); }
+    .legend { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 999px; font-size: .78rem; font-weight: 750; white-space: nowrap; }
+    .badge.no { color: var(--red); background: var(--red-bg); }
+    .badge.partial { color: var(--amber); background: var(--amber-bg); }
+    .badge.yes { color: var(--green); background: var(--green-bg); }
+    .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 36px 2px 14px; }
+    .section-heading p { max-width: 560px; margin: 0; color: var(--muted); font-size: .9rem; }
+    .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 16px; background: white; box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th, td { padding: 15px 17px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { position: sticky; top: 0; z-index: 1; background: #f0f4fb; color: #31405d; font-size: .75rem; letter-spacing: .07em; text-transform: uppercase; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #f9fbff; }
+    td:first-child { width: 20%; min-width: 160px; font-weight: 750; color: #223454; }
+    td:nth-child(2) { width: 39%; }
+    td:nth-child(3) { width: 41%; }
+    .cell-note { display: block; margin-top: 5px; color: var(--muted); font-size: .83rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 15px; }
+    .summary-card { padding: 19px; border: 1px solid var(--line); border-radius: 15px; background: white; }
+    .summary-card .num { display: block; margin-bottom: 7px; color: var(--blue); font-size: 1.45rem; font-weight: 850; letter-spacing: -.04em; }
+    .summary-card p { margin: 0; color: var(--muted); font-size: .9rem; }
+    .sources { margin-top: 34px; }
+    .sources ol { display: grid; gap: 10px; padding-left: 22px; color: var(--muted); }
+    .sources li { padding-left: 4px; }
+    .sources a { font-weight: 650; }
+    .footnote { margin-top: 22px; padding: 15px 18px; border-radius: 12px; background: var(--blue-pale); color: #31456d; font-size: .88rem; }
+    footer { padding: 0 0 35px; color: var(--muted); font-size: .82rem; }
+    @media (max-width: 760px) {
+      .hero { padding: 46px 0 40px; }
+      .hero-inner, main, footer { width: min(100% - 28px, 1120px); }
+      .intro-grid, .summary-grid { grid-template-columns: 1fr; }
+      .section-heading { display: block; }
+      .section-heading p { margin-top: 6px; }
+      .panel { padding: 19px; }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .hero-inner, main > section { animation: appear .55s ease both; }
+      main > section:nth-child(2) { animation-delay: .08s; }
+      main > section:nth-child(3) { animation-delay: .14s; }
+      @keyframes appear { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    }
+    @media print {
+      @page { size: A4 landscape; margin: 13mm; }
+      body { background: white; font-size: 10pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .hero { padding: 25px 0; }
+      .hero::before, .hero::after { display: none; }
+      .hero-inner, main, footer { width: 100%; }
+      main { padding: 16px 0 24px; }
+      .panel, .table-wrap { box-shadow: none; }
+      .table-wrap { overflow: visible; }
+      table { min-width: 0; font-size: 9pt; }
+      th, td { padding: 8px; }
+      th { position: static; }
+      tr { break-inside: avoid; }
+      .summary-grid { grid-template-columns: repeat(3, 1fr); }
+      a { color: inherit; }
+      a::after { content: " (" attr(href) ")"; font-size: 8pt; overflow-wrap: anywhere; }
+      .sources a::after { content: ""; }
+      footer { padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Comparativo funcional · Gestão de trabalho</p>
+      <h1>Gestão de Demandas <span aria-hidden="true">×</span> Jira</h1>
+      <p class="lead">O que a aplicação já resolve para a operação e quais recursos do Jira Software ainda não estão disponíveis no Gestão de Demandas.</p>
+      <div class="hero-meta" aria-label="Escopo do comparativo">
+        <span>Aplicação: branch atual</span>
+        <span>Referência do código: f0d81aa</span>
+        <span>Jira Software Cloud</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro-grid" aria-label="Escopo e legenda">
+      <article class="panel scope">
+        <h2>Escopo da comparação</h2>
+        <p>O comparativo considera a versão do Gestão de Demandas inspecionada na branch <strong>atualizacao-relatorios-farol-v2</strong> e os recursos de <strong>Jira Software Cloud</strong>. Recursos do Jira Service Management e de outros produtos Atlassian não estão incluídos. A disponibilidade de alguns recursos do Jira muda conforme o plano, o tipo de espaço e as configurações administrativas.</p>
+      </article>
+      <article class="panel">
+        <h2>Como ler a tabela</h2>
+        <p>“Não tem” indica que não foi encontrado recurso equivalente na aplicação. “Parcial” indica que existe uma capacidade relacionada, com escopo menor.</p>
+        <div class="legend" aria-label="Legenda">
+          <span class="badge no">● Não tem</span>
+          <span class="badge partial">◐ Parcial</span>
+          <span class="badge yes">● Disponível</span>
+        </div>
+      </article>
+    </section>
+
+    <section aria-labelledby="gaps-title">
+      <div class="section-heading">
+        <div><p class="eyebrow" style="color:var(--blue);margin-bottom:6px">Mapa de diferenças</p><h2 id="gaps-title">Recursos do Jira que faltam ou são parciais</h2></div>
+        <p>O Gestão de Demandas agora inclui hierarquia, releases, componentes, dependências, calendário, planejamento básico de capacidade, automações seguras e relatórios ágeis. A tabela abaixo destaca o que foi implementado e as diferenças que continuam parciais ou ausentes.</p>
+      </div>
+      <div class="table-wrap" role="region" aria-label="Tabela comparativa, role horizontalmente em telas pequenas" tabindex="0">
+        <table>
+          <thead><tr><th>Funcionalidade</th><th>Jira Software</th><th>Gestão de Demandas atual</th></tr></thead>
+          <tbody>
+            <tr><td>Hierarquia de trabalho</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Organiza itens em níveis, como épicos, tarefas e subtarefas. Níveis adicionais dependem dos planos Premium e Enterprise.</span></td><td><span class="badge yes">● Disponível</span><span class="cell-note">Níveis validados: épico → história/tarefa/bug → subtarefa. Relações incompatíveis e ciclos são bloqueados; reclassificar um pai não pode invalidar filhos.</span></td></tr>
+            <tr><td>Versões e releases</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Planeja versões com datas e itens associados e acompanha o progresso da entrega.</span></td><td><span class="badge yes">● Disponível</span><span class="cell-note">Releases têm datas, publicação, arquivamento e associação a cards.</span></td></tr>
+            <tr><td>Componentes</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Agrupa itens por área, funcionalidade ou frente de trabalho.</span></td><td><span class="badge yes">● Disponível</span><span class="cell-note">Componentes gerenciados podem ser associados aos cards junto das etiquetas.</span></td></tr>
+            <tr><td>Dependências entre cards</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Pode representar relações entre itens e visualizar dependências em planos avançados.</span></td><td><span class="badge yes">● Disponível</span><span class="cell-note">Cards podem bloquear, relacionar ou duplicar outros cards; o Timeline mostra conectores direcionais e oculta relações fora do recorte. Planos avançados com múltiplos projetos/equipes não estão incluídos.</span></td></tr>
+            <tr><td>Editor de workflows</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Permite configurar fluxos, condições, validações, ações e esquemas por tipo de item.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Regra base e políticas específicas por tipo coexistem; condições avaliadas no servidor também verificam release/componente vinculados e dependência bloqueadora ainda aberta; ações permitem prioridade, etiqueta, comentário, prazo relativo à criação, responsável interno ativo e atualização versionada de campos personalizados simples. O catálogo ainda é menor que o do Jira.</span></td></tr>
+            <tr><td>Automação sem código</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Cria regras com gatilhos, condições e ações, inclusive rotinas agendadas.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Construtor seguro dispara na criação/edição, alteração de campos nativos ou personalizados selecionados, responsável, fornecedor, prazo, prioridade, etapa, comentário/anexo, horas, aprovação, inclusão/retorno de sprint e eventos SCM. Rotinas diárias ou semanais (dias escolhidos, UTC) são idempotentes; ações encadeadas incluem prioridade, etiqueta, comentário, prazo após criação, responsável, observador e atualização versionada de campos personalizados simples. O log de execução é paginado e resume mudanças sem expor valores ou comentários. Filtros abrangem responsável, prazo, release, componente e dependência bloqueadora; o catálogo ainda é menor que o do Jira.</span></td></tr>
+            <tr><td>Busca avançada com JQL</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Usa linguagem de consulta para combinar campos, operadores, histórico e ordenação.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">A linguagem segura combina AND/OR, comparações, IN/NOT IN, campos vazios, statusCategory configurável por coluna, resolution baseada no motivo persistido no encerramento, resolutiondate derivada da conclusão auditada e texto em título, descrição e campos personalizados, ordenação e histórico de valores. Registra resolução em uma lista controlada de motivos; a JQL continua reduzida em relação à JQL completa.</span></td></tr>
+            <tr><td>Filtros compartilhados</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Permite compartilhar resultados e aproveitar filtros em dashboards e outros fluxos.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Filtros JQL salvos independentes podem ser reutilizados no quadro, backlog, dashboard e relatórios; o dono gerencia o compartilhamento por papel ou grupo interno. Visualizações/widgets também são compartilháveis e cada usuário pode criar assinaturas diárias/semanais com alertas para novas correspondências. A linguagem continua menor que a JQL.</span></td></tr>
+            <tr><td>Acompanhamento e notificações</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Notificações de atividades e esquemas configuráveis conforme o projeto.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Há acompanhamento, avisos internos e alertas por e-mail ou push opcionais. Canais externos enviam mensagem genérica e exigem configuração de SMTP ou VAPID; não reproduzem os esquemas de notificação do Jira.</span></td></tr>
+            <tr><td>Relatórios ágeis padronizados</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Inclui burndown, burnup, velocidade, relatório de sprint, control chart, cumulative flow e relatórios de épico e release.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Há burndown, burnup, cumulative flow, ciclo e control chart configurável por etapas, com dispersão, média e percentis P50/P85/P95. Inclui velocidade estimada e progresso de release/épico. A previsão mostra sprints restantes por mediana e percentis históricos, sem data prometida; o catálogo total ainda é menor.</span></td></tr>
+            <tr><td>Dashboards com gadgets</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Monta painéis com gadgets configuráveis, rearranjáveis e compartilháveis, incluindo estatísticas cruzadas e resultados de filtros.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Dashboards independentes por usuário, widgets configuráveis por agrupamento, medida e consulta JQL segura, compartilhamento e ordem pessoal. A matriz cruza duas dimensões em tabela; o gadget de resultados mostra cards em tabela com até 10 colunas selecionáveis e limite de 100, após filtros e permissões. As medidas incluem média de idade dos cards abertos, resolução e tempo corrente na etapa, calculado a partir de transições auditadas. Widgets compartilhados respeitam filtros de acesso; painéis de terceiros são somente leitura. O catálogo ainda é menor que o do Jira.</span></td></tr>
+            <tr><td>Calendário</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Oferece visualização de calendário para itens com datas e reprogramação visual.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Mostra cards com prazo, oferece lista de itens sem prazo e permite arrastar cards para alterar a data; a reprogramação registra histórico. Há exportação .ics e feed contínuo pessoal, somente leitura, com chave revogável e autenticação HTTP Basic; o servidor revalida o escopo do usuário e não inclui dados financeiros. A sincronização é unidirecional e não usa as APIs nativas Google/Outlook.</span></td></tr>
+            <tr><td>Planejamento de capacidade</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Planejamento por pessoa e equipe em recursos avançados, conforme o plano.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Disponibilidade por pessoa, fornecedor ou equipe interna é comparada às estimativas e distribuída igualmente pelos dias úteis, com alerta de sobrecarga; o cadastro da equipe preserva uma cópia de seus membros. Recomendações de redistribuição podem ser aplicadas a uma previsão diária versionada e auditada, sem reescrever prazos, horas ou custos dos cards. A previsão de sprint usa até seis sprints concluídas; ainda não automatiza a alteração de datas/responsáveis nem promete data de entrega.</span></td></tr>
+            <tr><td>Integrações de desenvolvimento</td><td><span class="badge yes">● Disponível</span><span class="cell-note">Relaciona itens a branches, commits, pull requests, builds e implantações de ferramentas integradas.</span></td><td><span class="badge partial">◐ Parcial</span><span class="cell-note">Webhooks opcionais registram e exibem repositório, branch, commit, PR, estado e ambiente de eventos GitHub, GitLab e Bitbucket vinculados a cards. Não sincroniza APIs nem mostra branches/builds/implantações que não emitam webhook.</span></td></tr>
+            <tr><td>Extensões de terceiros</td><td><span class="badge yes">● Disponível</span><span class="cell-note">O Atlassian Marketplace oferece aplicativos e gadgets adicionais.</span></td><td><span class="badge no">● Fora do escopo</span><span class="cell-note">Marketplace e instalação de extensões pela interface foram excluídos deliberadamente. Adapters de integração mantidos e implantados pela equipe técnica continuam disponíveis no backend.</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section aria-labelledby="summary-title">
+      <div class="section-heading"><div><p class="eyebrow" style="color:var(--blue);margin-bottom:6px">Leitura rápida</p><h2 id="summary-title">Onde estão as principais diferenças</h2></div></div>
+      <div class="summary-grid">
+        <article class="summary-card"><span class="num">Planejamento</span><p>A aplicação cobre hierarquia, releases, dependências, calendário, capacidade e aplicação auditada de redistribuição na previsão; o Jira mantém recursos mais avançados de planejamento e nivelamento.</p></article>
+        <article class="summary-card"><span class="num">Personalização</span><p>Workflows, automações, consulta e dashboards estão disponíveis em versões mais enxutas, com diferenças de cobertura em relação ao Jira.</p></article>
+        <article class="summary-card"><span class="num">Ecossistema</span><p>Integrações de desenvolvimento e extensões conectam o Jira a outras ferramentas e rotinas de entrega.</p></article>
+      </div>
+      <div class="footnote"><strong>Nota:</strong> o comparativo descreve capacidades encontradas na versão analisada do Gestão de Demandas e na documentação do Jira Software Cloud. Não significa que todos os recursos do Jira estejam incluídos em todos os planos.</div>
+    </section>
+
+    <section class="sources" aria-labelledby="sources-title">
+      <div class="section-heading"><div><p class="eyebrow" style="color:var(--blue);margin-bottom:6px">Referências</p><h2 id="sources-title">Documentação oficial consultada</h2></div></div>
+      <div class="panel">
+        <ol>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/generate-a-report/" target="_blank" rel="noopener noreferrer">Relatórios do Jira Software Cloud</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/use-advanced-search-with-jira-query-language-jql/" target="_blank" rel="noopener noreferrer">Busca avançada com Jira Query Language (JQL)</a></li>
+          <li><a href="https://support.atlassian.com/jira-cloud-administration/docs/configure-advanced-issue-workflows/" target="_blank" rel="noopener noreferrer">Configuração avançada de workflows</a></li>
+          <li><a href="https://support.atlassian.com/cloud-automation/docs/create-and-edit-jira-automation-rules" target="_blank" rel="noopener noreferrer">Criação de regras de automação</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/enable-releases-and-versions/" target="_blank" rel="noopener noreferrer">Versões e releases</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/group-and-track-work-with-components/" target="_blank" rel="noopener noreferrer">Componentes</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/what-are-dependencies-in-advanced-roadmaps/" target="_blank" rel="noopener noreferrer">Dependências no Advanced Roadmaps</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/create-and-edit-dashboards/" target="_blank" rel="noopener noreferrer">Criação e edição de dashboards</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/configure-development-tools/" target="_blank" rel="noopener noreferrer">Integrações com ferramentas de desenvolvimento</a></li>
+          <li><a href="https://support.atlassian.com/jira-software-cloud/docs/plan-individual-capacity-for-your-team/" target="_blank" rel="noopener noreferrer">Planejamento de capacidade individual</a></li>
+          <li><a href="https://support.atlassian.com/jira-cloud-administration/docs/configure-the-issue-type-hierarchy" target="_blank" rel="noopener noreferrer">Hierarquia de tipos de trabalho</a></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+  <footer>Comparativo preparado para apoiar a validação de escopo do Gestão de Demandas. Links externos abrem a documentação oficial da Atlassian.</footer>
+</body>
+</html>

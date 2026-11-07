@@ -1,6 +1,8 @@
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import { formatTimestamp } from "./types";
+import { compareHistoryVersions } from "./historyDiff";
 
 type Change = {
   field: string;
@@ -107,10 +109,35 @@ function value(field: string, item: unknown): string {
   return labels[text === "approved" ? "approved_value" : text] ?? text;
 }
 export function HistoryTimeline({ identity }: { identity: number }) {
+  const [fromId, setFromId] = useState("");
+  const [toId, setToId] = useState("");
   const data = useQuery({
     queryKey: ["history", identity],
     queryFn: () => api<Entry[]>(`/audit?entity=task&identity=${identity}`),
   });
+  const entries = data.data ?? [];
+  useEffect(() => {
+    if (!entries.length) {
+      setFromId("");
+      setToId("");
+      return;
+    }
+    setFromId((current) =>
+      entries.some((row) => String(row.id) === current)
+        ? current
+        : String(entries[0].id),
+    );
+    setToId((current) =>
+      entries.some((row) => String(row.id) === current)
+        ? current
+        : String(entries.at(-1)!.id),
+    );
+  }, [entries]);
+  const differences = useMemo(
+    () => compareHistoryVersions(entries, Number(fromId), Number(toId)),
+    [entries, fromId, toId],
+  );
+  const fromIndex = entries.findIndex((entry) => String(entry.id) === fromId);
   return (
     <section aria-label="Histórico de versões do card">
       <h3>Histórico de versões</h3>
@@ -122,8 +149,83 @@ export function HistoryTimeline({ identity }: { identity: number }) {
       {data.isPending && <p role="status">Carregando histórico…</p>}
       {data.isError && <p role="alert">{data.error.message}</p>}
       {data.data?.length === 0 && <p>Nenhum evento registrado.</p>}
+      {entries.length > 1 && (
+        <div className="history-compare">
+          <div>
+            <h4>Comparar versões</h4>
+            <p>Veja o que mudou entre dois registros do histórico.</p>
+          </div>
+          <label>
+            Versão inicial
+            <select
+              aria-label="Versão inicial"
+              value={fromId}
+              onChange={(event) => {
+                const next = event.target.value;
+                setFromId(next);
+                const nextIndex = entries.findIndex((row) => String(row.id) === next);
+                if (entries.findIndex((row) => String(row.id) === toId) <= nextIndex) {
+                  setToId(String(entries[Math.min(nextIndex + 1, entries.length - 1)].id));
+                }
+              }}
+            >
+              {entries.slice(0, -1).map((row) => (
+                <option key={row.id} value={row.id}>
+                  #{row.id} · {actions[row.action] ?? row.action} · {formatTimestamp(row.created_at)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Versão final
+            <select
+              aria-label="Versão final"
+              value={toId}
+              onChange={(event) => setToId(event.target.value)}
+            >
+              {entries.slice(Math.max(1, fromIndex + 1)).map((row) => (
+                <option key={row.id} value={row.id}>
+                  #{row.id} · {actions[row.action] ?? row.action} · {formatTimestamp(row.created_at)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {fromId && toId && (
+            differences.length ? (
+              <div className="table-scroll history-diff-table">
+                <table>
+                  <caption>
+                    Diferenças entre os registros #{fromId} e #{toId}
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Campo</th>
+                      <th scope="col">Versão inicial</th>
+                      <th scope="col">Versão final</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {differences.map((change, index) => (
+                      <tr key={`${change.field}:${change.kind}:${index}`}>
+                        <th scope="row">
+                          {change.label ?? labels[change.field] ?? change.field}
+                          {change.kind === "configuration" ? " · configuração" : ""}
+                        </th>
+                        <td>{value(change.field, change.before)}</td>
+                        <td>{value(change.field, change.after)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="history-no-diff">Nenhuma diferença de campo registrada entre essas versões.</p>
+            )
+          )}
+        </div>
+      )}
       <ol className="timeline">
-        {data.data?.map((row) => (
+        {entries.map((row) => (
           <li key={row.id}>
             <strong>
               {row.action === "hours_submitted" && row.details.operation

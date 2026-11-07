@@ -84,11 +84,46 @@ def test_hours_transitions_and_snapshot(clients):
     assert approved["cost_cents"] == 96000
     assert decision(clients, task).status_code == 200
     assert move(clients, approved, "done", "supplier").status_code == 403
-    done = move(clients, approved, "done").json()
+    invalid_resolution = move(clients, approved, "done", resolution="Won't Fix")
+    assert invalid_resolution.status_code == 422
+    assert get(clients, approved)["status"] == "review"
+    done = move(clients, approved, "done", resolution="Fixed").json()
     assert done["status"] == "done"
+    assert done["resolution"] == "Fixed"
     reopened = move(clients, done, "review", reason="CorreÃ§Ã£o autorizada").json()
     assert reopened["cost_cents"] == 0 and reopened["approval"] == "pending"
+    assert reopened["resolution"] is None
     assert hours(clients, reopened, 600, 420).status_code == 200
+
+
+def test_backward_transition_requires_explicit_workflow_rule(clients):
+    task = create(clients)
+    task = move(clients, task, "todo").json()
+    task = hours(clients, task, 600, 0).json()
+    task = move(clients, task, "production", "supplier").json()
+
+    denied = move(clients, task, "todo")
+    assert denied.status_code == 422
+    assert "retornos exigem uma transição configurada" in denied.text
+    assert get(clients, task)["status"] == "production"
+
+    configured = clients["admin"].post(
+        P + "/workflows/transitions",
+        json={"source": "production", "target": "todo", "roles": ["manager"]},
+    )
+    assert configured.status_code == 201, configured.text
+    returned = move(clients, task, "todo").json()
+    assert returned["status"] == "todo"
+    history = clients["admin"].get(
+        P + "/audit", params={"entity": "task", "identity": task["id"]}
+    )
+    assert history.status_code == 200
+    assert any(
+        event.get("action") == "status_changed"
+        and event.get("details", {}).get("origin") == "production"
+        and event.get("details", {}).get("destination") == "todo"
+        for event in history.json()
+    )
 
 
 def test_horizontal_financial_exports_and_csrf(clients):

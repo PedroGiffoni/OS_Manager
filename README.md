@@ -51,6 +51,7 @@ A experiência visual segue a referência Sebrae Ceará fornecida para o projeto
 | **Sprints Scrum** — planejar, iniciar, encerrar e reabrir com autorização | **Cards individuais** — campos, opções e regras por atividade | **Lead time e ciclos** — criação, produção e conclusão |
 | **Fornecedores** — cadastro individual e tarifas versionadas | **Horas e aprovação** — envio, rejeição, correção e decisão registrada | **Sprint e backlog** — compromisso, entregas, devoluções e idade |
 | **Permissões granulares** — papel e concessões explícitas | **Comentários e anexos** — colaboração vinculada à tarefa | **Relatórios filtráveis** — campos do card, exceto descrição, e exportações XLSX/PDF |
+| **Filtros JQL salvos** — consultas pessoais reutilizáveis e compartilhadas por papéis/grupos | **Automações auditáveis** — gatilhos por evento e agenda semanal/diária | **Dashboards configuráveis** — widgets com consulta avançada e escopo individual |
 
 ### Um fluxo, diferentes responsabilidades
 
@@ -297,10 +298,16 @@ Papel e permissão são distintos: um gestor sem concessão explícita não apro
 | `OS_MANAGER_ALLOW_DEMO_SEED` | Opt-in explícito para dados fictícios |
 | `OS_MANAGER_DEMO_PASSWORD` | Senha privada obrigatória no seed de nuvem |
 | `CLOUD_DEPLOYMENT` | Ativa exigências da configuração de nuvem |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | SMTP opcional para notificações genéricas; sem essas configurações, somente avisos internos ficam ativos |
+| `SMTP_STARTTLS`, `SMTP_SSL`, `APP_PUBLIC_URL` | Transporte SMTP e endereço usado no link dos e-mails; exemplos em `.env.example` |
+| `PUSH_VAPID_PUBLIC_KEY`, `PUSH_VAPID_PRIVATE_KEY`, `PUSH_VAPID_SUBJECT` | Web Push opcional; configure um par VAPID e assunto `mailto:` ou URL HTTPS |
+| `PUSH_SUBSCRIPTION_FERNET_KEY` | Chave independente para criptografar assinaturas push; não reutilize chaves de sessão |
 
 O caminho do SQLite é relativo ao diretório onde o backend é executado. Nos comandos locais acima, o arquivo fica em **`backend/data/os_manager.db`**, fora do Git. O diretório é criado automaticamente; a estrutura do banco é aplicada por migrações Alembic.
 
 As variáveis devem ser definidas no ambiente do processo. O Python não carrega `.env` implicitamente; o arquivo de exemplo documenta a configuração. Nunca versione senhas, tokens, banco ou anexos locais.
+
+Push requer navegador compatível e HTTPS (localhost é aceito para desenvolvimento). As preferências são individuais no menu de notificações; sem VAPID configurado, avisos internos continuam funcionando. O conteúdo entregue ao navegador é genérico e não inclui título, chave ou campos do card.
 
 > [!IMPORTANT]
 > SQLite atende ao protótipo e aos testes locais. A implantação institucional exige avaliação de banco, segurança, concorrência e homologação pela TI. A troca futura de SGBD não é automática: siga o [roteiro de migração e rollback](docs/DATABASE_MIGRATION.md).

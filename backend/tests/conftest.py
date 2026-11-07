@@ -1,39 +1,34 @@
-import os
-import subprocess
-import sys
 import pytest
+import app.main as main_module
+from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.db import get_db
+from app.db import Base, get_db
 from app.main import app
-from app.models import Role, Permission, User, Supplier, Rate
-from app.security import hasher, PERMISSIONS
-
+from app.models import Role, Permission, User, Supplier, Rate, KanbanColumn, Dashboard
+from app.security import PERMISSIONS
 
 @pytest.fixture
-def clients(tmp_path):
-    url = "sqlite:///" + str(tmp_path / "integration.db")
-    env = {**os.environ, "DATABASE_URL": url}
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        check=True,
-        env=env,
-        capture_output=True,
-    )
-    engine = create_engine(url, connect_args={"check_same_thread": False})
+def clients(tmp_path, monkeypatch):
+    # Retain Argon2 verification while making multi-user HTTP tests fast.
+    test_hasher = PasswordHasher(time_cost=1, memory_cost=1024, parallelism=1)
+    monkeypatch.setattr(main_module, "hasher", test_hasher)
+    test_db = tmp_path / "integration.db"
+    engine = create_engine(f"sqlite:///{test_db}", connect_args={"check_same_thread": False})
     from sqlalchemy import event
 
     @event.listens_for(engine, "connect")
     def fk(conn, _):
         conn.execute("PRAGMA foreign_keys=ON")
 
+    Base.metadata.create_all(engine)
     factory = sessionmaker(engine, expire_on_commit=False)
     with factory.begin() as db:
         db.add_all([Role(id=r) for r in ["admin", "manager", "internal", "supplier"]])
         db.add_all([Permission(id=p) for p in PERMISSIONS])
         db.flush()
-        hashed = hasher.hash("TestPassword!2026")
+        hashed = test_hasher.hash("TestPassword!2026")
         db.add_all(
             [
                 User(
@@ -93,6 +88,21 @@ def clients(tmp_path):
             [
                 Rate(supplier_id=1, cents=12000, author_id=1),
                 Rate(supplier_id=2, cents=15000, author_id=1),
+            ]
+        )
+        db.add_all(
+            [
+                KanbanColumn(key="backlog", title="Backlog", is_system=True, category="todo", workflow_order=0, view_order=0),
+                KanbanColumn(key="todo", title="A fazer", is_system=True, category="todo", workflow_order=100, view_order=1),
+                KanbanColumn(key="production", title="Em produção", is_system=True, category="in_progress", workflow_order=200, view_order=2),
+                KanbanColumn(key="review", title="Em revisão", is_system=True, category="in_progress", workflow_order=300, view_order=3),
+                KanbanColumn(key="done", title="Concluído", is_system=True, category="done", workflow_order=1000, view_order=4),
+            ]
+        )
+        db.add_all(
+            [
+                Dashboard(user_id=user_id, name="Visão geral", is_default=True)
+                for user_id in (1, 2, 3)
             ]
         )
 

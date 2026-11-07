@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from pydantic import Field
 from .db import get_db
+from .automation import run_automations
 from .models import Attachment, Comment, User
 from .schemas import Input
 from .security import current_user, allowed
@@ -15,6 +16,42 @@ router = APIRouter(prefix="/api/v1")
 
 class CommentInput(Input):
     body: str = Field(min_length=1, max_length=5000)
+
+
+def _record_comment_added(db, user, task, comment):
+    audit(db, user, "task", task.id, "comment_added", comment_id=comment.id, body=comment.body)
+    run_automations(
+        db,
+        user,
+        task,
+        "comment_added",
+        event_context={"comment_id": comment.id, "comment_body": comment.body},
+    )
+
+
+def _record_attachment_added(db, user, task, attachment):
+    audit(
+        db,
+        user,
+        "task",
+        task.id,
+        "attachment_added",
+        attachment_id=attachment.id,
+        name=attachment.name,
+        size=attachment.size,
+        sha256=attachment.sha256,
+    )
+    run_automations(
+        db,
+        user,
+        task,
+        "attachment_added",
+        event_context={
+            "attachment_id": attachment.id,
+            "media_type": attachment.media_type,
+            "size": attachment.size,
+        },
+    )
 
 
 def can_write(user):
@@ -55,7 +92,7 @@ def add_comment(identity: int, data: CommentInput, user=Depends(current_user), d
     row = Comment(task_id=identity, body=data.body, author_id=user.id)
     db.add(row)
     db.flush()
-    audit(db, user, "task", identity, "comment_added", comment_id=row.id, body=row.body)
+    _record_comment_added(db, user, task, row)
     db.commit()
     return {"id": row.id}
 
@@ -120,17 +157,7 @@ async def add_attachment(
     )
     db.add(row)
     db.flush()
-    audit(
-        db,
-        user,
-        "task",
-        identity,
-        "attachment_added",
-        attachment_id=row.id,
-        name=row.name,
-        size=row.size,
-        sha256=row.sha256,
-    )
+    _record_attachment_added(db, user, task, row)
     db.commit()
     return {"id": row.id}
 

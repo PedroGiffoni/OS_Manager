@@ -493,6 +493,7 @@ def sprint_summaries(db, user, selected_ids, criteria, reference, context):
                 criteria.get("starts"),
                 criteria.get("ends"),
                 row_context,
+                jql=criteria.get("jql", ""),
             )
             if row["id"] in selected_ids
         ]
@@ -596,6 +597,7 @@ def report(db, user, criteria, *, idle_days=7, reference=None):
         criteria.get("starts"),
         criteria.get("ends"),
         context,
+        jql=criteria.get("jql", ""),
     )
     cards = build_cards(db, rows, reference)
     minimum = criteria.get("min_phase_hours")
@@ -701,6 +703,7 @@ def report(db, user, criteria, *, idle_days=7, reference=None):
     }
     return {
         "as_of": reference.isoformat(),
+        "jql": criteria.get("jql", ""),
         "filters": filter_summary(*context),
         "period_basis": "Período seleciona a criação UTC das atividades. Tempos abrangem o histórico até o instante observado; sprint encerrada usa o encerramento.",
         "total": len(cards),

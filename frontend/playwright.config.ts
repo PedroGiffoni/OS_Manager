@@ -7,6 +7,7 @@ export default defineConfig({
   use: {
     baseURL: remoteURL || "http://127.0.0.1:5174",
     headless: true,
+    ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}),
     locale: "pt-BR",
     timezoneId: "America/Sao_Paulo",
     trace: remoteURL ? "off" : "retain-on-failure",

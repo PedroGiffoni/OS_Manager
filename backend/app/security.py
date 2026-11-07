@@ -20,6 +20,11 @@ PERMISSIONS = {
     "export_financial",
     "export_data",
     "manage_users",
+    "manage_planning",
+    "manage_capacity",
+    "manage_workflows",
+    "manage_automation",
+    "manage_integrations",
 }
 
 
@@ -55,3 +60,16 @@ def current_user(request: Request, db=Depends(get_db)):
 
 def supplier_for(db, user):
     return db.scalar(select(Supplier).where(Supplier.user_id == user.id))
+
+
+def active_internal_user(db, identity):
+    """Resolve an assignable internal account without exposing supplier accounts."""
+    if identity is None:
+        return None
+    user = db.get(User, identity)
+    if not user or not user.active or user.role == "supplier":
+        raise HTTPException(
+            422,
+            {"code": "INVALID_ASSIGNEE", "message": "Responsável interno indisponível."},
+        )
+    return user

@@ -32,16 +32,24 @@ export interface Task {
   id: number;
   title: string;
   description: string;
+  work_type?: "epic" | "story" | "task" | "bug" | "subtask";
+  parent_id?: number | null;
+  release_ids?: number[];
+  component_ids?: number[];
+  links?: { id: number; task_id: number; direction: "incoming" | "outgoing"; type: string }[];
   labels?: TaskLabel[];
   status: string;
   status_title?: string;
+  resolution?: "Done" | "Fixed" | "Duplicate" | "Won't Do" | "Cannot Reproduce" | "Other" | null;
   priority: number;
   due: string | null;
   planned_start?: string | null;
   supplier_id: number | null;
+  assignee_user_id?: number | null;
   sprint_id: number | null;
   estimated_minutes: number;
   used_minutes: number;
+  worklog_comment?: string;
   hours_version: number;
   approval: string;
   approval_reason?: string;
@@ -69,6 +77,24 @@ export interface Sprint {
   state: string;
   owner_id: number;
   version: number;
+}
+export interface DevelopmentEvent {
+  id: number;
+  provider: "github" | "gitlab" | "bitbucket";
+  event_type: string;
+  summary: string;
+  url: string;
+  actor: string;
+  occurred_at: string | null;
+  received_at: string;
+  metadata: {
+    repository?: string;
+    branch?: string;
+    commit?: string;
+    pull_request?: string;
+    state?: string;
+    environment?: string;
+  };
 }
 export const stages: Record<string, string> = {
   backlog: "Backlog",

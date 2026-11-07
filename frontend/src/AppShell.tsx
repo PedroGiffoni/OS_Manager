@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   ListTodo,
   CalendarRange,
+  CalendarPlus,
   Columns3,
   UsersRound,
   ChartNoAxesCombined,
@@ -20,9 +21,33 @@ import {
   Layers3,
   ShieldCheck,
   ChevronRight,
+  Bell,
+  Filter,
 } from "lucide-react";
 import type { Account } from "./types";
 import { useTheme } from "./useTheme";
+import { api } from "./api";
+import { pushEndpointDigest, vapidKeyToUint8Array } from "./push";
+
+type Notice = { id: number; task_id: number; task_title: string; action: string; source_label?: string | null; actor: string; created_at: string; read: boolean };
+type NotificationPreferences = { email: string; email_enabled: boolean; email_delivery_configured: boolean };
+type PushConfiguration = { available: boolean; public_key: string | null; device_count: number; device_limit: number; active_on_this_browser: boolean };
+const actionLabels: Record<string, string> = {
+  status_changed: "alterou a etapa",
+  hours_submitted: "enviou horas",
+  hours_approved: "aprovou as horas",
+  hours_rejected: "rejeitou as horas",
+  task_updated: "atualizou a atividade",
+  task_created: "criou a atividade",
+  watch_started: "começou a acompanhar",
+  watch_stopped: "parou de acompanhar",
+  hours_decided: "registrou uma decisão sobre as horas",
+  dependency_added: "adicionou uma dependência",
+  dependency_removed: "removeu uma dependência",
+  schedule_changed: "alterou o planejamento",
+  archived: "arquivou a atividade",
+  filter_match: "encontrou uma nova atividade no filtro salvo",
+};
 
 const roleNames: Record<string, string> = {
   admin: "Administrador",
@@ -68,6 +93,20 @@ function Navigation({
       icon: Columns3,
       group: "Operação",
       visible: true,
+    },
+    {
+      to: "/filtros-salvos",
+      label: "Assinaturas de filtros",
+      icon: Filter,
+      group: "Operação",
+      visible: true,
+    },
+    {
+      to: "/planejamento",
+      label: "Planejamento avançado",
+      icon: CalendarPlus,
+      group: "Gestão",
+      visible: ["manage_planning", "manage_capacity", "manage_workflows", "manage_automation"].some((permission) => account.permissions.includes(permission)),
     },
     {
       to: "/aprovacoes",
@@ -167,7 +206,120 @@ export function AppShell({
   const [dark, toggleTheme] = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [noticesOpen, setNoticesOpen] = useState(false);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
+  const [notificationPreferencesError, setNotificationPreferencesError] = useState("");
+  const [notificationPreferencesSaved, setNotificationPreferencesSaved] = useState(false);
+  const [pushConfiguration, setPushConfiguration] = useState<PushConfiguration | null>(null);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
   const drawer = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    let active = true;
+    const load = () => api<Notice[]>("/notifications?limit=30").then((rows) => { if (active) setNotices(rows); }).catch(() => {});
+    void load();
+    void api<NotificationPreferences>("/me/notification-preferences").then((value) => { if (active) setNotificationPreferences(value); }).catch(() => {});
+    void (async () => {
+      try {
+        let config = await api<PushConfiguration>("/me/push-configuration");
+        if (config.available && window.isSecureContext && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && Notification.permission === "granted") {
+          const registration = await navigator.serviceWorker.register("/push-worker.js");
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            const digest = await pushEndpointDigest(subscription.endpoint);
+            config = await api<PushConfiguration>(`/me/push-configuration?endpoint_identity=${digest}`);
+          }
+        }
+        if (active) {
+          setPushConfiguration(config);
+          setPushEnabled(config.active_on_this_browser);
+        }
+      } catch {
+        if (active) setPushConfiguration(null);
+      }
+    })();
+    const timer = window.setInterval(load, 60_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  const loadNotices = async () => {
+    const rows = await api<Notice[]>("/notifications?limit=30");
+    setNotices(rows);
+    setNoticesOpen((open) => !open);
+  };
+  const saveNotificationPreferences = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!notificationPreferences) return;
+    setNotificationPreferencesError("");
+    setNotificationPreferencesSaved(false);
+    try {
+      const saved = await api<NotificationPreferences>("/me/notification-preferences", "PUT", {
+        email: notificationPreferences.email || null,
+        email_enabled: notificationPreferences.email_enabled,
+      });
+      setNotificationPreferences(saved);
+      setNotificationPreferencesSaved(true);
+    } catch (error) {
+      setNotificationPreferencesError(error instanceof Error ? error.message : "Não foi possível salvar as preferências.");
+    }
+  };
+  const togglePushNotifications = async () => {
+    if (!pushConfiguration?.available || !pushConfiguration.public_key) return;
+    setPushBusy(true);
+    setPushError("");
+    try {
+      if (!window.isSecureContext || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+        throw new Error("Este navegador precisa de HTTPS e suporte a notificações push.");
+      }
+      const registration = await navigator.serviceWorker.register("/push-worker.js");
+      let subscription = await registration.pushManager.getSubscription();
+      if (pushEnabled) {
+        if (subscription) {
+          const digest = await pushEndpointDigest(subscription.endpoint);
+          await api(`/me/push-subscriptions/${digest}`, "DELETE");
+          await subscription.unsubscribe();
+        }
+        setPushEnabled(false);
+        setPushConfiguration((current) => current ? { ...current, active_on_this_browser: false, device_count: Math.max(0, current.device_count - 1) } : current);
+      } else {
+        if (Notification.permission !== "granted") {
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") throw new Error("Permita notificações neste navegador para ativar o push.");
+        }
+        subscription ??= await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: vapidKeyToUint8Array(pushConfiguration.public_key),
+        });
+        const saved = await api<{ device_count: number }>("/me/push-subscriptions", "POST", subscription.toJSON());
+        setPushEnabled(true);
+        setPushConfiguration((current) => current ? { ...current, active_on_this_browser: true, device_count: saved.device_count } : current);
+      }
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : "Não foi possível atualizar as notificações push.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
+  const revokeAllPushNotifications = async () => {
+    if (!window.confirm("Remover notificações push de todos os seus dispositivos?")) return;
+    setPushBusy(true);
+    setPushError("");
+    try {
+      await api("/me/push-subscriptions", "DELETE");
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        const subscription = await registration?.pushManager.getSubscription();
+        await subscription?.unsubscribe();
+      }
+      setPushEnabled(false);
+      setPushConfiguration((current) => current ? { ...current, device_count: 0, active_on_this_browser: false } : current);
+    } catch (error) {
+      setPushError(error instanceof Error ? error.message : "Não foi possível remover os dispositivos push.");
+    } finally {
+      setPushBusy(false);
+    }
+  };
   useEffect(() => {
     const element = drawer.current!;
     if (menuOpen && !element.open) element.showModal();
@@ -207,6 +359,10 @@ export function AppShell({
           </div>
         </div>
         <div className="header-actions">
+          <button className="header-icon notification-trigger" aria-label={`Notificações, ${notices.filter((notice) => !notice.read).length} não lidas`} aria-expanded={noticesOpen} onClick={() => void loadNotices().catch(() => {})}>
+            <Bell size={20} aria-hidden="true" />
+            {notices.some((notice) => !notice.read) && <span className="notification-count">{notices.filter((notice) => !notice.read).length}</span>}
+          </button>
           <button
             className="header-icon"
             onClick={toggleTheme}
@@ -238,6 +394,29 @@ export function AppShell({
           </button>
         </div>
       </header>
+      {noticesOpen && <section className="notification-popover" aria-label="Notificações">
+        <div className="section-title"><strong>Notificações</strong><button onClick={() => setNoticesOpen(false)}>Fechar</button></div>
+        {notices.length === 0 ? <p className="muted">Você ainda não tem notificações.</p> : notices.map((notice) => <article className={notice.read ? "notice read" : "notice"} key={notice.id}>
+          <div><strong>OS-{notice.task_id} · {notice.task_title}</strong><p>{notice.actor} {actionLabels[notice.action] ?? "registrou uma atualização"}{notice.action === "filter_match" && notice.source_label ? ` “${notice.source_label}”` : ""}.</p><small>{new Date(notice.created_at).toLocaleString("pt-BR")}</small></div>
+          {!notice.read && <button onClick={() => api(`/notifications/${notice.id}/read`, "PUT").then(() => setNotices((current) => current.map((row) => row.id === notice.id ? { ...row, read: true } : row))).catch(() => {})}>Marcar como lida</button>}
+        </article>)}
+        <form className="notification-email-preferences" onSubmit={(event) => void saveNotificationPreferences(event)}>
+          <strong>Receber avisos por e-mail</strong>
+          <label className="field-label">Seu e-mail<input type="email" maxLength={254} autoComplete="email" value={notificationPreferences?.email ?? ""} disabled={!notificationPreferences} onChange={(event) => { setNotificationPreferences((current) => current ? { ...current, email: event.target.value } : current); setNotificationPreferencesSaved(false); }} placeholder="nome@empresa.com.br" /></label>
+          <label className="notification-email-toggle"><input type="checkbox" checked={notificationPreferences?.email_enabled ?? false} disabled={!notificationPreferences?.email_delivery_configured && !notificationPreferences?.email_enabled} onChange={(event) => { setNotificationPreferences((current) => current ? { ...current, email_enabled: event.target.checked } : current); setNotificationPreferencesSaved(false); }} /> Ativar notificações por e-mail</label>
+          <small className="muted">O e-mail contém apenas um aviso genérico e um link para entrar na aplicação. Os detalhes do card aparecem depois do login, conforme suas permissões.{notificationPreferences && !notificationPreferences.email_delivery_configured ? " O envio ainda não foi configurado neste ambiente." : ""}</small>
+          {notificationPreferencesError && <small className="rejection" role="alert">{notificationPreferencesError}</small>}
+          {notificationPreferencesSaved && <small className="success-message" role="status">Preferências salvas.</small>}
+          <button type="submit" disabled={!notificationPreferences}>Salvar preferências</button>
+        </form>
+        <section className="notification-push-preferences" aria-label="Notificações push">
+          <strong>Notificações neste navegador</strong>
+          <small className="muted">{pushConfiguration?.available ? `${pushConfiguration.device_count} de ${pushConfiguration.device_limit} dispositivos configurados.` : "Push indisponível neste ambiente até que as chaves VAPID sejam configuradas."} Os avisos são genéricos e não mostram dados do card.</small>
+          {pushError && <small className="rejection" role="alert">{pushError}</small>}
+          <button type="button" disabled={!pushConfiguration?.available || pushBusy} onClick={() => void togglePushNotifications()}>{pushBusy ? "Atualizando…" : pushEnabled ? "Desativar neste navegador" : "Ativar neste navegador"}</button>
+          {(pushConfiguration?.device_count ?? 0) > 0 && <button type="button" disabled={pushBusy} onClick={() => void revokeAllPushNotifications()}>Remover de todos os dispositivos</button>}
+        </section>
+      </section>}
       <aside className="desktop-sidebar">
         <div className="sidebar-heading">
           <Layers3 size={22} aria-hidden="true" />

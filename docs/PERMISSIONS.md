@@ -15,6 +15,14 @@ Papel não concede automaticamente poderes financeiros ao gestor. Administrador 
 | Exportar operacional | usuário interno com export_data; fornecedor não consulta nem exporta relatórios |
 | Exportar financeiro | admin/manager, export_data, view_financial e export_financial |
 | Gerenciar concessões/criar usuários | somente administrador; listagens exigem manage_users |
+| Criar releases, componentes, dependências e capacidade | manage_planning e manage_capacity; concessões explícitas para gestores |
+| Configurar transições e automações | manage_workflows e manage_automation; validações nativas não são removíveis |
+| Atribuir responsável em regra automática | manage_workflows ou manage_automation; somente contas internas ativas, sem mudar a atribuição do fornecedor |
+| Criar widgets pessoais | usuário autenticado; fornecedor recebe apenas dados do próprio escopo |
+| Compartilhar visualização/widget | manage_planning; compartilhamento não concede acesso a custos |
+| Gerenciar grupos de compartilhamento | somente administrador; membros precisam ser contas internas ativas. Acesso por grupo não contorna escopo financeiro nem inclui fornecedores |
+| Acompanhar atividade/receber notificações | somente atividades visíveis no escopo atual; notificações revalidam acesso em cada consulta |
+| Gerenciar assinatura de filtro | usuário autenticado administra somente as próprias assinaturas; resultados e notificações usam o escopo atual, inclusive fornecedor |
 | Informar horas | somente conta supplier vinculada ao fornecedor atualmente atribuído |
 | Mover cards | gestor/administrador ou fornecedor atribuído; regras nativas permanecem obrigatórias |
 | Concluir/reabrir tarefa concluída | somente gestor/administrador; conclusão exige aprovação atual; reabertura exige justificativa |
