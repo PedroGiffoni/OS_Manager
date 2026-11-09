@@ -40,6 +40,8 @@ from .integration_events import record_development_event
 from .query_language import apply_query
 from .models import (
     User,
+    Board,
+    BoardMember,
     Role,
     Session,
     Supplier,
@@ -85,9 +87,12 @@ from .security import (
     supplier_for,
     PERMISSIONS,
     effective_permissions,
+    board_list_payload,
+    list_visible_boards,
 )
 from .schemas import (
     Login,
+    BoardInput,
     UserProfileInput,
     UserInput,
     SupplierInput,
@@ -145,6 +150,7 @@ from .services import (
     move_task,
     cost_cents,
     blocking_path_exists,
+    get_column,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -323,6 +329,81 @@ def health(db=Depends(get_db)):
     return {"status": "ok"}
 
 
+def require_admin(user):
+    if user.role != "admin":
+        fail("Somente administradores podem criar quadros e gerenciar seus acessos.", 403, "FORBIDDEN")
+
+
+def validate_board_members(db, user_ids):
+    if not user_ids:
+        return
+    available = set(db.scalars(select(User.id).where(User.id.in_(user_ids), User.active.is_(True))))
+    if available != set(user_ids):
+        fail("Um ou mais usuários selecionados estão indisponíveis.")
+
+
+@app.get(PREFIX + "/boards")
+def boards(user=Depends(current_user), db=Depends(get_db)):
+    return board_list_payload(db, user)
+
+
+@app.post(PREFIX + "/boards", status_code=201)
+def create_board(data: BoardInput, user=Depends(current_user), db=Depends(get_db)):
+    require_admin(user)
+    validate_board_members(db, data.user_ids)
+    duplicate = db.scalar(select(Board.id).where(func.lower(Board.name) == data.name.lower()))
+    if duplicate:
+        fail("Já existe um quadro com esse nome.", 409, "DUPLICATE_BOARD")
+    row = Board(name=data.name, description=data.description, author_id=user.id)
+    db.add(row)
+    db.flush()
+    for identity in data.user_ids:
+        db.add(BoardMember(board_id=row.id, user_id=identity, granted_by=user.id))
+    # New boards need their own workflow columns because status configuration is
+    # isolated by board. Start from the existing principal board's catalog.
+    defaults = list(db.scalars(
+        select(KanbanColumn)
+        .where(KanbanColumn.board_id == 1)
+        .execution_options(skip_board_scope=True)
+        .order_by(KanbanColumn.view_order)
+    ))
+    db.info["board_id"] = row.id
+    for column in defaults:
+        db.add(KanbanColumn(
+            board_id=row.id,
+            key=column.key,
+            title=column.title,
+            is_system=column.is_system,
+            category=column.category,
+            workflow_order=column.workflow_order,
+            view_order=column.view_order,
+            wip_limit=column.wip_limit,
+        ))
+    audit(db, user, "board", row.id, "created", name=row.name, members=data.user_ids)
+    db.commit()
+    return next(board for board in board_list_payload(db, user) if board["id"] == row.id)
+
+
+@app.put(PREFIX + "/boards/{identity}")
+def update_board(identity: int, data: BoardInput, user=Depends(current_user), db=Depends(get_db)):
+    require_admin(user)
+    row = db.get(Board, identity)
+    if not row or not row.active:
+        fail("Quadro não encontrado.", 404, "NOT_FOUND")
+    validate_board_members(db, data.user_ids)
+    duplicate = db.scalar(select(Board.id).where(func.lower(Board.name) == data.name.lower(), Board.id != identity))
+    if duplicate:
+        fail("Já existe um quadro com esse nome.", 409, "DUPLICATE_BOARD")
+    before = {"name": row.name, "description": row.description}
+    row.name, row.description = data.name, data.description
+    db.query(BoardMember).filter(BoardMember.board_id == identity).delete(synchronize_session=False)
+    for member_id in data.user_ids:
+        db.add(BoardMember(board_id=identity, user_id=member_id, granted_by=user.id))
+    audit(db, user, "board", identity, "updated", before=before, after={"name": row.name, "description": row.description, "members": data.user_ids})
+    db.commit()
+    return next(board for board in board_list_payload(db, user) if board["id"] == identity)
+
+
 @app.post(PREFIX + "/auth/login")
 def login(data: Login, request: Request, response: Response, db=Depends(get_db)):
     key = (request.client.host, data.username.casefold())
@@ -358,12 +439,15 @@ def login(data: Login, request: Request, response: Response, db=Depends(get_db))
         max_age=28800,
         path="/api",
     )
+    visible_boards = board_list_payload(db, user)
     return {
         "id": user.id,
         "username": user.username,
         "role": user.role,
         "permissions": sorted(effective_permissions(user)),
         "csrf": csrf,
+        "boards": visible_boards,
+        "active_board_id": visible_boards[0]["id"] if visible_boards else 1,
     }
 
 
@@ -371,13 +455,15 @@ DUMMY_HASH = hasher.hash(secrets.token_urlsafe(32))
 
 
 @app.get(PREFIX + "/auth/me")
-def me(request: Request, user=Depends(current_user)):
+def me(request: Request, user=Depends(current_user), db=Depends(get_db)):
     return {
         "id": user.id,
         "username": user.username,
         "role": user.role,
         "permissions": sorted(effective_permissions(user)),
         "csrf": request.state.session.csrf,
+        "boards": board_list_payload(db, user),
+        "active_board_id": request.state.board_id,
     }
 
 
@@ -959,9 +1045,11 @@ def calendar_subscription_feed(
     user = db.get(User, feed.user_id) if feed else None
     if not feed or not user or not user.active:
         _calendar_auth_error()
+    visible_board_ids = [board.id for board in list_visible_boards(db, user)]
     tasks = list(
         db.scalars(
             scoped_tasks(db, user)
+            .where(Task.board_id.in_(visible_board_ids))
             .where(Task.due.is_not(None))
             .order_by(Task.due, Task.id)
         )
@@ -2491,7 +2579,7 @@ def rename_board_column(
     key: str, data: KanbanColumnRename, user=Depends(current_user), db=Depends(get_db)
 ):
     internal_manager(user)
-    row = db.get(KanbanColumn, key)
+    row = get_column(db, key)
     if not row:
         fail("Coluna não encontrada.", 404)
     if data.title is not None and row.is_system and data.title != row.title:
@@ -2531,7 +2619,7 @@ def rename_board_column(
 @app.delete(PREFIX + "/board/columns/{key}")
 def delete_board_column(key: str, user=Depends(current_user), db=Depends(get_db)):
     internal_manager(user)
-    row = db.get(KanbanColumn, key)
+    row = get_column(db, key)
     if not row:
         fail("Coluna não encontrada.", 404)
     if row.is_system:
@@ -3855,7 +3943,7 @@ def dashboard_widget_data(
         }
         rows = []
         for task in tasks:
-            status_column = db.get(KanbanColumn, task.status)
+            status_column = get_column(db, task.status)
             assignee = db.get(User, task.assignee_user_id) if task.assignee_user_id else None
             supplier = db.get(Supplier, task.supplier_id) if task.supplier_id else None
             sprint = db.get(Sprint, task.sprint_id) if task.sprint_id else None

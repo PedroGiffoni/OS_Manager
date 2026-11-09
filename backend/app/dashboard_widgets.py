@@ -16,6 +16,7 @@ from .models import (
     TaskRelease,
     User,
 )
+from .services import get_column
 
 
 def filtered_widget_query(query, jql, role, actor_user_id=None):
@@ -41,7 +42,7 @@ WORK_TYPE_LABELS = {
 
 def widget_group_keys(db, task, dimension, today=None, show_parent_details=True, resolved_at=None):
     if dimension == "status":
-        column = db.get(KanbanColumn, task.status)
+        column = get_column(db, task.status)
         return [column.title if column else task.status]
     if dimension == "priority":
         return [f"Prioridade {task.priority}"]

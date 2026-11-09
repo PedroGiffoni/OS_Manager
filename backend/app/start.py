@@ -1,4 +1,4 @@
-"""Single-process entrypoint for local containers and disposable cloud tests."""
+"""Single-process entrypoint for local containers and hosted tests."""
 
 import os
 import subprocess

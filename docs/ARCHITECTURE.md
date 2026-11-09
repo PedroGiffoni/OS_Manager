@@ -4,7 +4,7 @@
 
 React/TypeScript e Vite renderizam a aplicação em pt-BR. React Router organiza páginas; TanStack Query mantém consultas e invalida o cache após mutações; React Hook Form/Zod validam formulários; dnd-kit oferece movimento/ordenação e suporte a teclado; Recharts apresenta indicadores. Estilos CSS locais mantêm o design responsivo sem serviço externo ou fontes remotas. Os componentes usam labels, botões e selects nativos e foco visível.
 
-FastAPI publica REST `/api/v1` e OpenAPI em `/api/docs`. `main.py` trata transporte, permissões por ação e coordenação transacional; `security.py` concentra sessão/RBAC; `schemas.py` valida entradas; `services.py` concentra regras e serialização por perfil; `repositories.py` concentra filtros; `reporting.py` deriva indicadores; `exports.py` gera arquivos; `collaboration.py` trata comentários/anexos. `db.py` é a fronteira SQLAlchemy e isola PRAGMAs SQLite. Nenhuma regra depende de React.
+FastAPI publica REST `/api/v1` e OpenAPI em `/api/docs`. `main.py` trata transporte, permissões por ação e coordenação transacional; `security.py` concentra sessão/RBAC; `schemas.py` valida entradas; `services.py` concentra regras e serialização por perfil; `repositories.py` concentra filtros; `reporting.py` deriva indicadores; `exports.py` gera arquivos; `collaboration.py` trata comentários/anexos. `db.py` centraliza SQLAlchemy e conexões PostgreSQL via psycopg. Nenhuma regra depende de React.
 
 Todas as consultas de atividades passam por escopo no servidor. O fornecedor é resolvido por vínculo com a conta. Consultas por ID de atividade alheia retornam 404; permissões de ação recusadas retornam 403. Tarifas/custos são adicionados explicitamente apenas a payloads de administrador/gestor com autorização financeira. Exports operacionais não serializam valores financeiros.
 
@@ -14,7 +14,7 @@ Alembic é o único caminho operacional de alteração de esquema. Migrações t
 
 Valores financeiros são inteiros em centavos; esforço é inteiro em minutos. Custo é calculado com Decimal e ROUND_HALF_UP ao centavo. Não se aceita tarifa/custo de tarefa no payload de edição. A alocação aponta para uma versão de tarifa e guarda seu snapshot. Aprovações apontam para alocação e versão de horas, com chave estrangeira composta e unicidade. Snapshots fechados de sprint preservam o retrato de seus indicadores e os fechamentos anteriores.
 
-Task e Sprint usam versão otimista no SQLAlchemy. Mutações exigem versão do cliente. Atualizações obsoletas ou violações de vínculos retornam 409; uma transação recusada não é confirmada. Aprovação repetida da mesma versão/decisão/justificativa é idempotente, sem segundo lançamento. WAL, foreign_keys e busy_timeout são configurados na infraestrutura. SQLite tem um escritor por vez e pode retornar indisponibilidade em contenção; não substitui o dimensionamento de um banco institucional.
+Task e Sprint usam versão otimista no SQLAlchemy. Mutações exigem versão do cliente. Atualizações obsoletas ou violações de vínculos retornam 409; uma transação recusada não é confirmada. Aprovação repetida da mesma versão/decisão/justificativa é idempotente, sem segundo lançamento. A integridade referencial e concorrência transacional são fornecidas pelo PostgreSQL. A aplicação, Compose local e Render usam PostgreSQL; fixtures isoladas de testes legados ainda podem usar SQLite em memória, sem armazenar dados operacionais.
 
 ## Autenticação e segurança
 
@@ -26,4 +26,4 @@ Auditoria registra ator/instante e eventos de tarifa, alocação, schema, horas,
 
 ## Execução
 
-Desenvolvimento: API 8000, Vite 5173 com proxy `/api`. Docker: Nginx 8080 com proxy para API, volume persistente SQLite e health checks. Um único processo de API é o padrão local. Bibliotecas não exigem telemetria externa, provedores de identidade ou contas em nuvem.
+Desenvolvimento: PostgreSQL local no Compose, API 8000 e Vite 5173 com proxy `/api`. Docker: Nginx 8080 com proxy para API, volume persistente PostgreSQL e health checks. Um único processo de API é o padrão local. Bibliotecas não exigem telemetria externa, provedores de identidade ou contas em nuvem.

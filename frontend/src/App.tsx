@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import { ReportFilters, type ReportCondition } from "./ReportFilters";
 import { HoursErrorDialog } from "./HoursErrorDialog";
-import { api, setCsrf } from "./api";
+import { api, setActiveBoardId, setCsrf } from "./api";
 import {
   stages,
   money,
@@ -55,7 +55,7 @@ import {
   type Sprint,
 } from "./types";
 import { TaskList, Board, TaskDetail } from "./Tasks";
-import { Sprints, Suppliers, Administration } from "./Management";
+import { Sprints, Suppliers, Administration, BoardAdministration } from "./Management";
 import { Planning } from "./Planning";
 import { FilterSubscriptions } from "./FilterSubscriptions";
 export type Run = (action: () => Promise<unknown>) => Promise<void>;
@@ -247,8 +247,15 @@ export default function App() {
     queryKey: ["session"],
     queryFn: async () => {
       try {
-        const user = await api<Account>("/auth/me");
+        let user: Account;
+        try {
+          user = await api<Account>("/auth/me");
+        } catch {
+          setActiveBoardId(null);
+          user = await api<Account>("/auth/me");
+        }
         setCsrf(user.csrf);
+        setActiveBoardId(user.active_board_id ?? 1);
         setAccount(user);
         return user;
       } catch {
@@ -361,6 +368,7 @@ export default function App() {
       <Login
         onLogin={(user) => {
           setCsrf(user.csrf);
+          setActiveBoardId(user.active_board_id ?? 1);
           setAccount(user);
           client.invalidateQueries();
           navigate("/");
@@ -376,6 +384,7 @@ export default function App() {
           run(async () => {
             await api("/auth/logout", "POST");
             setAccount(null);
+            setActiveBoardId(null);
             setJqlDraft("");
             setJqlApplied("");
             setSelectedSavedFilterId("");
@@ -642,6 +651,7 @@ export default function App() {
                 )
               }
             />
+            <Route path="/quadros" element={account.role === "admin" ? <BoardAdministration run={run} /> : <Empty>Acesso restrito a administradores.</Empty>} />
             <Route path="*" element={<Empty>Página não encontrada.</Empty>} />
           </Routes>
         </main>

@@ -79,6 +79,9 @@ def run_due_filter_subscriptions(session_factory, *, now_utc=None, limit=100):
             )
             if not subscription or not subscription.active or subscription.next_run_at > current_text:
                 continue
+            # A scheduler session has no request context; establish the subscription's
+            # board before reading cards or writing notifications/audit data.
+            db.info["board_id"] = subscription.board_id
             user = db.get(User, subscription.user_id)
             if not user or not user.active:
                 subscription.active = False

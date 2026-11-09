@@ -109,6 +109,12 @@ describe("filtros avançados das views", () => {
       />,
     );
 
+    const filtersToggle = screen.getByRole("button", { name: /Visualizações e filtros/ });
+    expect(filtersToggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Consulta avançada (servidor)")).not.toBeVisible();
+    fireEvent.click(filtersToggle);
+    expect(filtersToggle).toHaveAttribute("aria-expanded", "true");
+
     const input = screen.getByLabelText("Consulta avançada (servidor)");
     fireEvent.change(input, {
       target: { value: 'status = "review" ORDER BY due ASC' },

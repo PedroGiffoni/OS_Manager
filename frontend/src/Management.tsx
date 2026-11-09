@@ -672,3 +672,57 @@ export function Administration({ run }: { run: Run }) {
     </section>
   );
 }
+
+type ManagedBoard = { id: number; name: string; description: string; active: boolean; members: { id: number; username: string; role: string; active: boolean }[] };
+type ManagedUser = { id: number; username: string; role: string; active: boolean };
+
+export function BoardAdministration({ run }: { run: Run }) {
+  const boards = useQuery({ queryKey: ["boards"], queryFn: () => api<ManagedBoard[]>("/boards") });
+  const users = useQuery({ queryKey: ["users"], queryFn: () => api<ManagedUser[]>("/users") });
+  const [editing, setEditing] = useState<ManagedBoard | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]);
+  const startCreate = () => { setEditing(null); setSelected([]); setCreating(true); };
+  const startEdit = (board: ManagedBoard) => {
+    setEditing(board); setSelected(board.members.map((member) => member.id)); setCreating(false);
+  };
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    run(async () => {
+      await api(editing ? `/boards/${editing.id}` : "/boards", editing ? "PUT" : "POST", {
+        name: String(values.get("name") ?? "").trim(),
+        description: String(values.get("description") ?? "").trim(),
+        user_ids: selected,
+      });
+      setEditing(null); setCreating(false); setSelected([]);
+    });
+  };
+  const open = creating || editing !== null;
+  return <section className="panel board-administration">
+    <div className="section-title">
+      <div><span className="eyebrow">CONFIGURAÇÃO DO ESPAÇO</span><h2>Quadros e acessos</h2><p className="muted">Cada quadro tem cards, sprints, colunas e configurações isolados. Somente administradores podem criar quadros ou alterar seus membros.</p></div>
+      {!open && <button className="primary" onClick={startCreate}>+ Criar quadro</button>}
+    </div>
+    {open && <form className="inline-form" onSubmit={submit}>
+      <h3>{editing ? `Editar acesso — ${editing.name}` : "Novo quadro"}</h3>
+      <div className="form-grid">
+        <Label title="Nome do quadro"><input name="name" minLength={2} maxLength={120} defaultValue={editing?.name} required placeholder="Ex.: Demandas internas" /></Label>
+        <Label title="Descrição"><input name="description" maxLength={1000} defaultValue={editing?.description} placeholder="Finalidade ou equipe responsável" /></Label>
+      </div>
+      <fieldset className="board-member-picker"><legend>Pessoas autorizadas</legend>
+        <p className="muted">Fornecedores também precisam estar selecionados aqui e continuarão vendo apenas os cards atribuídos a eles.</p>
+        <div className="board-member-list">{(users.data ?? []).filter((member) => member.active).map((member) => <label key={member.id}>
+          <input type="checkbox" checked={selected.includes(member.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, member.id] : current.filter((id) => id !== member.id))} />
+          <span><strong>{member.username}</strong><small>{({ admin: "Administrador · acesso global", manager: "Gestor", internal: "Usuário interno", supplier: "Fornecedor · somente cards atribuídos" } as Record<string, string>)[member.role] ?? member.role}</small></span>
+        </label>)}</div>
+      </fieldset>
+      <div className="actions"><button className="primary" disabled={users.isPending}>{editing ? "Salvar quadro e acessos" : "Criar quadro"}</button><button type="button" onClick={() => { setEditing(null); setCreating(false); setSelected([]); }}>Cancelar</button></div>
+    </form>}
+    {boards.isPending ? <Empty>Carregando quadros…</Empty> : boards.isError ? <Empty>Não foi possível carregar os quadros.</Empty> : <div className="board-admin-list">{(boards.data ?? []).map((board) => <article className="board-admin-card" key={board.id}>
+      <div><span className="badge">{board.id === 1 ? "Principal" : "Quadro"}</span><h3>{board.name}</h3><p>{board.description || "Sem descrição."}</p><small>{board.members.length} pessoa(s) com acesso direto</small></div>
+      <button onClick={() => startEdit(board)}>Gerenciar acessos</button>
+    </article>)}</div>}
+    {(boards.data?.length ?? 0) === 0 && <Empty>Nenhum quadro disponível.</Empty>}
+  </section>;
+}

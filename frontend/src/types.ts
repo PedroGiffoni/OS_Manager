@@ -4,6 +4,7 @@ export interface Account {
   role: string;
   permissions: string[];
   csrf: string;
+  active_board_id: number;
 }
 export interface Field {
   id: string;

@@ -48,6 +48,24 @@ class User(Base):
     profile_photo_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
+class Board(Base):
+    __tablename__ = "boards"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1", index=True)
+    author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[str] = mapped_column(String, default=now)
+
+
+class BoardMember(Base):
+    __tablename__ = "board_members"
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
+    granted_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = mapped_column(String, default=now)
+
+
 class Session(Base):
     __tablename__ = "sessions"
     token_hash: Mapped[str] = mapped_column(String, primary_key=True)
@@ -83,6 +101,7 @@ class Sprint(Base):
     )
     __table_args__ = (CheckConstraint("ends >= starts"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     name: Mapped[str] = mapped_column(String(160))
     objective: Mapped[str] = mapped_column(Text)
     starts: Mapped[str] = mapped_column(String)
@@ -110,6 +129,7 @@ class Task(Base):
         CheckConstraint("parent_id IS NULL OR parent_id != id", name="ck_task_not_own_parent"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     title: Mapped[str] = mapped_column(String(240))
     description: Mapped[str] = mapped_column(Text, default="")
     work_type: Mapped[str] = mapped_column(String(30), default="task", server_default="task")
@@ -211,6 +231,7 @@ class Approval(Base):
 class Audit(Base):
     __tablename__ = "audit_logs"
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int | None] = mapped_column(ForeignKey("boards.id"), index=True, nullable=True)
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     entity: Mapped[str] = mapped_column(String, index=True)
     entity_id: Mapped[int] = mapped_column(Integer, index=True)
@@ -262,12 +283,13 @@ class Comment(Base):
 class KanbanColumn(Base):
     __tablename__ = "kanban_columns"
     __table_args__ = (
-        UniqueConstraint("workflow_order"),
-        UniqueConstraint("view_order"),
+        UniqueConstraint("board_id", "workflow_order"),
+        UniqueConstraint("board_id", "view_order"),
         CheckConstraint("category IN ('todo', 'in_progress', 'done')", name="ck_kanban_columns_category"),
         CheckConstraint("wip_limit IS NULL OR wip_limit > 0", name="ck_kanban_columns_wip_limit_positive"),
     )
     key: Mapped[str] = mapped_column(String(60), primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, primary_key=True, default=1, server_default="1")
     title: Mapped[str] = mapped_column(String(100))
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     category: Mapped[str] = mapped_column(String(20), default="todo", server_default="todo")
@@ -278,8 +300,9 @@ class KanbanColumn(Base):
 
 class KanbanSavedView(Base):
     __tablename__ = "kanban_saved_views"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    __table_args__ = (UniqueConstraint("board_id", "user_id", "name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(80))
     layout: Mapped[str] = mapped_column(String(20), default="board")
@@ -293,10 +316,11 @@ class KanbanSavedView(Base):
 class SavedFilter(Base):
     __tablename__ = "saved_filters"
     __table_args__ = (
-        UniqueConstraint("owner_id", "name", name="uq_saved_filters_owner_name"),
+        UniqueConstraint("board_id", "owner_id", "name", name="uq_saved_filters_owner_name"),
         Index("ix_saved_filters_shared", "shared"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     query: Mapped[str] = mapped_column(Text)
@@ -340,6 +364,7 @@ class TaskWatcher(Base):
 class InAppNotification(Base):
     __tablename__ = "in_app_notifications"
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
     actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -410,11 +435,12 @@ class PushOutbox(Base):
 class FilterSubscription(Base):
     __tablename__ = "filter_subscriptions"
     __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_filter_subscription_user_name"),
+        UniqueConstraint("board_id", "user_id", "name", name="uq_filter_subscription_user_name"),
         CheckConstraint("frequency IN ('daily', 'weekly')", name="ck_filter_subscription_frequency"),
         Index("ix_filter_subscriptions_due", "active", "next_run_at"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     query: Mapped[str] = mapped_column(Text)
@@ -440,8 +466,9 @@ class FilterSubscriptionMatch(Base):
 
 class Release(Base):
     __tablename__ = "releases"
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (UniqueConstraint("board_id", "name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     starts: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -458,8 +485,9 @@ class Release(Base):
 
 class Component(Base):
     __tablename__ = "components"
-    __table_args__ = (UniqueConstraint("name"),)
+    __table_args__ = (UniqueConstraint("board_id", "name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -517,6 +545,7 @@ class ResourceCapacity(Base):
         UniqueConstraint("supplier_id", "user_id", "starts", "ends"),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     supplier_id: Mapped[int | None] = mapped_column(
         ForeignKey("suppliers.id"), nullable=True, index=True
     )
@@ -534,8 +563,9 @@ class ResourceCapacity(Base):
 
 class WorkflowTransition(Base):
     __tablename__ = "workflow_transitions"
-    __table_args__ = (UniqueConstraint("source", "target"),)
+    __table_args__ = (UniqueConstraint("board_id", "source", "target"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     source: Mapped[str] = mapped_column(String(60), index=True)
     target: Mapped[str] = mapped_column(String(60), index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
@@ -552,6 +582,7 @@ class WorkflowTransition(Base):
 class AutomationRule(Base):
     __tablename__ = "automation_rules"
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     name: Mapped[str] = mapped_column(String(120))
     trigger: Mapped[str] = mapped_column(String(40), index=True)
     schedule_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
@@ -580,8 +611,9 @@ class AutomationRun(Base):
 
 class DashboardWidget(Base):
     __tablename__ = "dashboard_widgets"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    __table_args__ = (UniqueConstraint("board_id", "user_id", "name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     group_by: Mapped[str] = mapped_column(String(30))
@@ -606,8 +638,9 @@ class DashboardWidget(Base):
 
 class Dashboard(Base):
     __tablename__ = "dashboards"
-    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_dashboards_user_name"),)
+    __table_args__ = (UniqueConstraint("board_id", "user_id", "name", name="uq_dashboards_user_name"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -633,6 +666,7 @@ class DevelopmentEvent(Base):
     __tablename__ = "development_events"
     __table_args__ = (UniqueConstraint("provider", "delivery_id", "task_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    board_id: Mapped[int] = mapped_column(ForeignKey("boards.id"), index=True, default=1, server_default="1")
     provider: Mapped[str] = mapped_column(String(20), index=True)
     delivery_id: Mapped[str] = mapped_column(String(160))
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)

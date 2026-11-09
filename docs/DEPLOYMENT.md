@@ -6,9 +6,9 @@
 
 ## Armazenamento de teste
 
-O desenvolvimento local continua usando SQLite em `backend/data/os_manager.db`. Para o Render, o usuário autorizou PostgreSQL Free no workspace My Workspace, exclusivamente com dados fictícios de teste. O banco gratuito criado em Ohio expira em **06/12/2026**; ele não tem backups automáticos e o provedor o exclui após o prazo. A aplicação e o banco podem suspender; PostgreSQL mantém os registros enquanto a instância existir, inclusive durante reinícios do backend. Exporte os dados antes do prazo se precisar preservá-los.
+O desenvolvimento local, Docker Compose e Render usam PostgreSQL. Localmente o banco roda no serviço `postgres` e volume `postgres-data`; no Render o usuário autorizou PostgreSQL Free no workspace My Workspace, exclusivamente com dados fictícios de teste. O banco gratuito criado em Ohio expira em **06/12/2026**; não tem backups automáticos e o provedor o exclui após o prazo. Exporte dados de teste antes do prazo se precisar preservá-los.
 
-O banco online recebe o seed fictício (contas, fornecedores e tarefas de demonstração), não uma cópia do SQLite local. `OS_MANAGER_DEMO_PASSWORD` permanece como segredo no Render. Não habilite esse seed para produção nem use dados financeiros reais. Este arranjo é apenas para testes; não é arquitetura institucional de produção.
+O banco online recebe o seed fictício (contas, fornecedores e tarefas de demonstração), não uma cópia de dados locais legados. `OS_MANAGER_DEMO_PASSWORD` permanece como segredo no Render. Não habilite esse seed para produção nem use dados financeiros reais. Este arranjo é apenas para testes; não é arquitetura institucional de produção.
 
 Vercel Hobby restringe uso a projetos pessoais e não comerciais; valide a elegibilidade da demonstração. Este guia não constitui implantação institucional de produção.
 
@@ -18,7 +18,7 @@ Fontes consultadas em 15/10/2026: [Render Free](https://render.com/docs/free), [
 
 O repositório informado pelo usuário é `PedroGiffoni/OS_Manager`, público, com a raiz em `os-manager` (NÃO a pasta de instalação do Pen). Somente o código deve ser enviado. O provedor precisa ter acesso ao repositório. Vercel CLI autenticada; backend publicado no Render Free.
 
-O `.gitignore` exclui o SQLite, `.env`, `.venv`, dependências, resultados e credenciais locais da Vercel. O `.dockerignore` do backend exclui os dados e arquivos `.env`. Não envie o banco local: a publicação usa outro banco, criado por migrações.
+O `.gitignore` exclui dados locais, `.env`, `.venv`, dependências, resultados e credenciais locais da Vercel. O `.dockerignore` do backend exclui bancos e arquivos `.env`. Não envie credenciais ou arquivos locais: a publicação usa o PostgreSQL Render, criado por migrações.
 
 ## 2. Definir o domínio estável do frontend
 
@@ -81,4 +81,4 @@ Execute novamente os testes locais após qualquer ajuste. Evidência local não 
 
 ## Atualização, interrupção e dados
 
-Auto deploy do Render está desabilitado no Blueprint para que um commit não reinicie acidentalmente a demonstração. Atualize manualmente quando puder reiniciar os testes. O SQLite local permanece independente. O PostgreSQL Free não tem backups automáticos e expira em 06/12/2026; faça exportação lógica antes dessa data ou crie outro ambiente. Excel/PDF são relatórios, não backup integral do banco.
+Auto deploy do Render está desabilitado no Blueprint para que um commit não reinicie acidentalmente a demonstração. Atualize manualmente quando puder reiniciar os testes. O ambiente local usa PostgreSQL via Docker Compose, separado do PostgreSQL do Render. O antigo arquivo SQLite foi preservado como legado inativo e não é aberto pela aplicação. O PostgreSQL Free não tem backups automáticos e expira em 06/12/2026; faça exportação lógica antes dessa data ou crie outro ambiente. Excel/PDF são relatórios, não backup integral do banco.

@@ -512,26 +512,32 @@ function Column({
       ref={setNodeRef}
       className={"kanban-column " + (isOver ? "over" : "")}
     >
-      <h3 draggable={canManage} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", status); onDragStart(); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onDrop(); }}>
-        <i className={status} />
-        {editing ? <input aria-label="Título da coluna" autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onRename(draft)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setDraft(title); event.currentTarget.blur(); } }} /> : <button className="kanban-column-title" onClick={() => canManage && onEdit()}>{title}</button>}
-        {canManage && <select className="kanban-column-category" aria-label={`Categoria da coluna ${title}`} value={category === "done" ? "done" : category} disabled={status === "done"} onChange={(event) => onCategory(event.target.value as "todo" | "in_progress")}>
-          <option value="todo">A fazer</option><option value="in_progress">Em andamento</option>{status === "done" && <option value="done">Concluído</option>}
-        </select>}
-        <span className={wipLimit && count > wipLimit ? "kanban-wip-count exceeded" : "kanban-wip-count"} aria-label={wipLimit ? `${count} cards visíveis; limite WIP ${wipLimit}` : `${count} cards visíveis`}>
-          {count}{wipLimit ? ` / ${wipLimit}` : ""}
-        </span>
-        {summary && <small className="kanban-column-sum">{summary}</small>}
-        {canManage && <div className="kanban-column-tools">
-          <label className="kanban-wip-editor" title="Limite de trabalho em andamento (WIP)">
-            WIP
-            <input aria-label={`Limite WIP de ${title}`} type="number" min="1" max="10000" placeholder="—" value={wipDraft} onChange={(event) => setWipDraft(event.target.value)} onBlur={commitWip} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setWipDraft(wipLimit?.toString() ?? ""); }} />
-          </label>
-          <button aria-label={`Mover ${title} para a esquerda`} disabled={isFirst} onClick={() => onMove(-1)}><ArrowLeft size={14} aria-hidden="true" /></button>
-          <button aria-label={`Mover ${title} para a direita`} disabled={isLast} onClick={() => onMove(1)}><ArrowRight size={14} aria-hidden="true" /></button>
-          {status.startsWith("custom_") && <><button aria-label={`Editar ${title}`} onClick={onEdit}>✎</button><button aria-label={`Excluir ${title}`} onClick={onDelete}><Trash2 size={13} aria-hidden="true" /></button></>}
+      <header className="kanban-column-header" draggable={canManage} onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", status); onDragStart(); }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onDrop(); }}>
+        <div className="kanban-column-heading">
+          <i className={status} />
+          {editing ? <input aria-label="Título da coluna" autoFocus value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onRename(draft)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") { setDraft(title); event.currentTarget.blur(); } }} /> : <h3><button className="kanban-column-title" onClick={() => canManage && onEdit()}>{title}</button></h3>}
+          <span className={wipLimit && count > wipLimit ? "kanban-wip-count exceeded" : "kanban-wip-count"} aria-label={wipLimit ? `${count} cards visíveis; limite WIP ${wipLimit}` : `${count} cards visíveis`}>
+            {count}{wipLimit ? ` / ${wipLimit}` : ""}
+          </span>
+        </div>
+        {(canManage || summary) && <div className="kanban-column-controls">
+          {canManage && <>
+            <select className="kanban-column-category" aria-label={`Categoria da coluna ${title}`} value={category === "done" ? "done" : category} disabled={status === "done"} onChange={(event) => onCategory(event.target.value as "todo" | "in_progress")}>
+              <option value="todo">A fazer</option><option value="in_progress">Em andamento</option>{status === "done" && <option value="done">Concluído</option>}
+            </select>
+            <div className="kanban-column-tools">
+              <label className="kanban-wip-editor" title="Limite de trabalho em andamento (WIP)">
+                WIP
+                <input aria-label={`Limite WIP de ${title}`} type="number" min="1" max="10000" placeholder="—" value={wipDraft} onChange={(event) => setWipDraft(event.target.value)} onBlur={commitWip} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setWipDraft(wipLimit?.toString() ?? ""); }} />
+              </label>
+              <button aria-label={`Mover ${title} para a esquerda`} disabled={isFirst} onClick={() => onMove(-1)}><ArrowLeft size={14} aria-hidden="true" /></button>
+              <button aria-label={`Mover ${title} para a direita`} disabled={isLast} onClick={() => onMove(1)}><ArrowRight size={14} aria-hidden="true" /></button>
+              {status.startsWith("custom_") && <><button aria-label={`Editar ${title}`} onClick={onEdit}>✎</button><button aria-label={`Excluir ${title}`} onClick={onDelete}><Trash2 size={13} aria-hidden="true" /></button></>}
+            </div>
+          </>}
+          {summary && <small className="kanban-column-sum">{summary}</small>}
         </div>}
-      </h3>
+      </header>
       {children}
     </section>
   );

@@ -29,7 +29,7 @@ Com sprint encerrada selecionada, usa o snapshot de etapa/horas/custos e a vers�
 
 Testes de integração cobrem todos os tipos, combinação de filtros, preview, custos exatos, autorização financeira/horizontal, campos ocultos, datas/números inválidos, limites, paginação, Excel/PDF e schema histórico. O fluxo Playwright valida escolha de campos, combinação, remoção, estados vazios e os dois downloads.
 
-A V1 filtra os registros já autorizados em memória, mantendo portabilidade do SQLite e a lógica de snapshots. A paginação limita a resposta, não o custo de cálculo do conjunto. Para grandes volumes institucionais, avaliar índices, consultas específicas para o SGBD homologado e testes de carga antes de implantação; não há comprovação de capacidade institucional por estes testes funcionais.
+A V1 filtra os registros já autorizados em memória, preservando a lógica de snapshots. A paginação limita a resposta, não o custo de cálculo do conjunto. Para grandes volumes institucionais, avaliar índices e executar testes de carga antes de implantação; não há comprovação de capacidade institucional por estes testes funcionais.
 
 ## Atalho de relatório completo para administrador
 

@@ -34,6 +34,7 @@ def fail(message, status=422, code="BUSINESS_RULE"):
 def audit(db, actor, entity, identity, action, *, timestamp=None, **details):
     details["actor_name"] = actor.username
     audit_row = Audit(
+        board_id=identity if entity == "board" else db.info.get("board_id"),
         actor_id=actor.id,
         entity=entity,
         entity_id=identity,
@@ -81,6 +82,10 @@ def version(row, expected):
             409,
             "CONFLICT",
         )
+
+
+def get_column(db, key):
+    return db.scalar(select(KanbanColumn).where(KanbanColumn.key == key))
 
 
 def scoped_tasks(db, user):
@@ -224,7 +229,7 @@ def task_payload(db, user, task):
             result["parent_id"] = None
     if user.role != "supplier":
         result["assignee_user_id"] = task.assignee_user_id
-    status_column = db.get(KanbanColumn, task.status)
+    status_column = get_column(db, task.status)
     result["status_title"] = status_column.title if status_column else task.status
     result["release_ids"] = list(
         db.scalars(select(TaskRelease.release_id).where(TaskRelease.task_id == task.id))

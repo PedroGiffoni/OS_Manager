@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   ListTodo,
@@ -29,16 +30,18 @@ import {
   ChevronDown,
   UserRound,
   Camera,
+  PanelsTopLeft,
 } from "lucide-react";
 import type { Account } from "./types";
 import { useTheme } from "./useTheme";
-import { api, uploadImage } from "./api";
+import { api, setActiveBoardId, uploadImage } from "./api";
 import { pushEndpointDigest, vapidKeyToUint8Array } from "./push";
 
 type Notice = { id: number; task_id: number; task_title: string; action: string; source_label?: string | null; actor: string; created_at: string; read: boolean };
 type NotificationPreferences = { email: string; email_enabled: boolean; email_delivery_configured: boolean };
 type PushConfiguration = { available: boolean; public_key: string | null; device_count: number; device_limit: number; active_on_this_browser: boolean };
 type UserProfile = { username: string; display_name: string; contact_email: string; contact_phone: string; photo_url: string | null };
+type BoardSummary = { id: number; name: string; description: string; active: boolean };
 const actionLabels: Record<string, string> = {
   status_changed: "alterou a etapa",
   hours_submitted: "enviou horas",
@@ -177,6 +180,13 @@ function Navigation({
       group: "Configuração",
       visible: account.permissions.includes("manage_users"),
     },
+    {
+      to: "/quadros",
+      label: "Quadros e acessos",
+      icon: PanelsTopLeft,
+      group: "Configuração",
+      visible: account.role === "admin",
+    },
   ].filter(
     (item) =>
       item.visible &&
@@ -276,6 +286,8 @@ export function AppShell({
   const profileMenu = useRef<HTMLDivElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const location = useLocation();
+  const boards = useQuery({ queryKey: ["boards"], queryFn: () => api<BoardSummary[]>("/boards") });
+  const activeBoardId = Number(localStorage.getItem("os-manager-active-board") || account.active_board_id);
   useEffect(() => {
     let active = true;
     const load = () => api<Notice[]>("/notifications?limit=30").then((rows) => { if (active) setNotices(rows); }).catch(() => {});
@@ -521,6 +533,16 @@ export function AppShell({
             <span>Sebrae Ceará</span>
           </div>
         </div>
+        {boards.data && boards.data.length > 1 && <label className="header-board-switcher">
+          <span>Quadro ativo</span>
+          <select aria-label="Quadro ativo" value={boards.data.some((board) => board.id === activeBoardId) ? activeBoardId : account.active_board_id} onChange={(event) => {
+            const nextId = Number(event.target.value);
+            setActiveBoardId(nextId);
+            window.location.reload();
+          }}>
+            {boards.data.map((board) => <option key={board.id} value={board.id}>{board.name}</option>)}
+          </select>
+        </label>}
         <div className="header-actions">
           <button className="header-icon notification-trigger" aria-label={`Notificações, ${notices.filter((notice) => !notice.read).length} não lidas`} aria-expanded={noticesOpen} onClick={() => void loadNotices().catch(() => {})}>
             <Bell size={20} aria-hidden="true" />

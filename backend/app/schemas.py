@@ -14,6 +14,17 @@ class Login(Input):
     password: str = Field(min_length=1, max_length=256)
 
 
+class BoardInput(Input):
+    name: str = Field(min_length=2, max_length=120)
+    description: str = Field(default="", max_length=1000)
+    user_ids: list[StrictInt] = Field(default_factory=list, max_length=500)
+    @model_validator(mode="after")
+    def valid_members(self):
+        if any(identity <= 0 for identity in self.user_ids) or len(set(self.user_ids)) != len(self.user_ids):
+            raise ValueError("A lista de membros contém IDs inválidos ou repetidos.")
+        return self
+
+
 class NotificationPreferenceInput(Input):
     email: str | None = Field(default=None, max_length=254)
     email_enabled: StrictBool = False

@@ -2,6 +2,18 @@ param([switch]$Demo)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot
 Set-Location $projectRoot
+if (-not $env:DATABASE_URL) { $env:DATABASE_URL='postgresql+psycopg://os_manager:os_manager@localhost:5432/os_manager' }
+if ($env:DATABASE_URL -match '@(localhost|127\.0\.0\.1):5432/') {
+    docker compose up -d postgres
+    if ($LASTEXITCODE) { throw 'Não foi possível iniciar o PostgreSQL local. Inicie o Docker Desktop e tente novamente.' }
+    $postgresReady=$false
+    for ($attempt=0; $attempt -lt 30; $attempt++) {
+        docker compose exec -T postgres pg_isready -U os_manager -d os_manager *> $null
+        if ($LASTEXITCODE -eq 0) { $postgresReady=$true; break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $postgresReady) { throw 'O PostgreSQL local não ficou pronto em 60 segundos.' }
+}
 if (!(Test-Path '.venv/Scripts/python.exe')) { python -m venv .venv; if ($LASTEXITCODE) { throw 'Falha ao criar venv' } }
 & .venv/Scripts/python.exe -m pip install -r backend/requirements.lock.txt
 if ($LASTEXITCODE) { throw 'Falha ao instalar backend' }

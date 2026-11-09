@@ -3,7 +3,7 @@
 import os
 from sqlalchemy import select
 from .db import SessionLocal
-from .models import User, Role, Permission, Supplier, Rate, Task, Sprint
+from .models import User, Role, Permission, Supplier, Rate, Task, Sprint, Board, BoardMember
 from .security import hasher, PERMISSIONS
 from .services import set_supplier
 
@@ -65,6 +65,12 @@ def run():
             db.add(row)
             db.flush()
             users[username] = row
+        board = db.get(Board, 1)
+        if board:
+            if board.author_id is None:
+                board.author_id = users["admin"].id
+            for row in users.values():
+                db.add(BoardMember(board_id=board.id, user_id=row.id, granted_by=users["admin"].id))
         supplier = Supplier(
             name="Ana Exemplo",
             function="Desenvolvimento",

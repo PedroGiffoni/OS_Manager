@@ -1,7 +1,7 @@
 # Limitações e validações pendentes
 
 - Docker Compose foi fornecido, mas não pôde ser executado: o Docker Desktop não disponibilizou `dockerDesktopLinuxEngine`. Validar build, health checks, restart e persistência do volume em máquina com daemon ativo antes de considerar esse caminho homologado.
-- O ambiente local usa SQLite. O Render de teste usa PostgreSQL Free 16 de 1 GB, que expira em 06/12/2026 e não inclui backups automáticos; nenhum teste institucional de carga, HA, SGBD corporativo, SSO ou produção foi realizado.
+- A aplicação local e Render usam PostgreSQL. O Render de teste usa instância Free 16 de 1 GB, que expira em 06/12/2026 e não inclui backups automáticos; nenhum teste institucional de carga, HA, SSO ou produção foi realizado. Fixtures unitárias legadas ainda usam SQLite em memória.
 - Login usa limitação em memória por origem/conta; reiniciar o processo limpa a janela. Implantação com múltiplos workers exige mecanismo compartilhado e política institucional de autenticação. Não há recuperação automática de senha ou MFA na V1.
 - Sessão local usa cookie sem Secure porque o endereço de desenvolvimento é HTTP. HTTPS, Secure, origens permitidas, gestão de credenciais e política de expiração precisam ser configurados antes de qualquer publicação.
 - O quadro percorre páginas de até 200 atividades para suportar filtros avançados no servidor. Seletores de atividade pai ainda carregam no máximo 200 opções e o seletor de fornecedores até 100; bases maiores exigem busca remota nesses controles. A Timeline desenha dependências entre os cards presentes no recorte, mas não substitui planos avançados com múltiplos projetos/equipes.
@@ -33,5 +33,5 @@ Os testes executados e seus resultados constam em VALIDATION.md. Limitações n�
 - `priority_changed` dispara na edição do card quando a prioridade difere; a criação inicial segue coberta por `card_created`.
 - O `TestClient` usa `httpx2` fixado nas dependências para compatibilidade com Starlette atual. Em Windows, testes de integração HTTP podem precisar de execução fora de um sandbox que bloqueie sockets locais.
 
-- Em 07/11/2026 a suíte Playwright completa passou localmente: **14 testes** em SQLite temporário, incluindo filtros JQL salvos. Isso não valida o deploy remoto após mudanças de banco/branch; E2E no Render e homologação institucional seguem pendentes. Ver `DEPLOYMENT_STATUS.md`. Docker local continua sem daemon validado.
+- Em 07/11/2026 a suíte Playwright completa passou localmente: **14 testes** em SQLite temporário, incluindo filtros JQL salvos. O runner atual usa PostgreSQL dedicado `os_manager_e2e`; precisa ser executado novamente após essa troca de configuração. E2E no Render e homologação institucional seguem pendentes. Ver `DEPLOYMENT_STATUS.md`.
 - E-mail opcional ainda não valida a posse do endereço; os textos são genéricos e não expõem dados de atividade. Homologar política de confirmação institucional antes de habilitar para contas reais. Falhas SMTP e Web Push são repetidas com backoff, até cinco tentativas; não foi feita entrega real em provedores externos nesta validação.

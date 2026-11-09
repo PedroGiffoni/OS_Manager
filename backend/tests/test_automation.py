@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.automation import matches, run_automations, run_due_scheduled_automations
 from app.db import Base
 from app.main import automation_payload, include_task, sprint_action, update_task_schedule
-from app.models import Audit, AutomationRule, AutomationRun, Comment, Role, SchemaVersion, Sprint, SprintTask, Task, TaskWatcher, User
+from app.models import Audit, AutomationRule, AutomationRun, Board, Comment, Role, SchemaVersion, Sprint, SprintTask, Task, TaskWatcher, User
 from app.schemas import AssignSprint, SprintAction, TaskScheduleInput
 from app.schemas import AutomationRuleInput
 
@@ -461,6 +461,8 @@ def test_automation_action_sequence_applies_in_order_with_one_audit_and_version(
         )
         db.add_all([actor, watcher])
         db.flush()
+        db.add(Board(id=1, name="Quadro principal", author_id=actor.id))
+        db.flush()
         task = Task(id=1, title="Card para comentar", creator_id=1, labels=[{"text": "Legado", "color": "#888888"}])
         rule = AutomationRule(
             id=1,
@@ -731,6 +733,8 @@ def test_starting_sprint_runs_card_automation_in_transaction():
             grants=[],
         )
         db.add(actor)
+        db.flush()
+        db.add(Board(id=1, name="Quadro principal", author_id=actor.id))
         db.flush()
         sprint = Sprint(
             id=1,

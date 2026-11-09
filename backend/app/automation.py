@@ -263,6 +263,10 @@ def run_due_scheduled_automations(session_factory, now=None):
     for rule_id in rule_ids:
         with session_factory() as db:
             rule = db.get(AutomationRule, rule_id)
+            if rule:
+                # Scheduled jobs run without an HTTP request. Scope all card reads and
+                # automation writes to the rule's board explicitly.
+                db.info["board_id"] = rule.board_id
             if (
                 not rule
                 or not rule.enabled

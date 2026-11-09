@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
-import { ArrowLeft, ArrowRight, CalendarRange, Copy, Download, Eye, KeyRound, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarRange, ChevronDown, Copy, Download, Eye, KeyRound, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import type { Account, Sprint, Task } from "./types";
 
 export type ViewLayout = "board" | "table" | "timeline" | "calendar";
@@ -256,15 +256,15 @@ export function ViewTools({
   onRename: () => void; onMoveView: (identity: number, direction: number) => void;
   onSave: (name?: string) => void; onDuplicate: () => void; onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const activeOwned = views.find((view) => view.id === activeId)?.owner_id === currentUserId;
   const ownedViews = views.filter((view) => view.owner_id === currentUserId);
   return (
-    <section className="project-view-tools" aria-label="Visualizações e filtros">
+    <section className={open ? "project-view-tools open" : "project-view-tools collapsed"} aria-label="Visualizações e filtros">
       <div className="project-view-heading">
-        <button className="project-view-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <Eye size={18} aria-hidden="true" /> Views <span>{open ? "−" : "+"}</span>
+        <button className="project-view-toggle" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="project-view-controls-panel">
+          <Eye size={18} aria-hidden="true" /> Visualizações e filtros <ChevronDown className={open ? "project-view-chevron open" : "project-view-chevron"} size={16} aria-hidden="true" />
         </button>
         {views.map((view) => (
           <div className="view-tab-wrap" key={view.id}>
@@ -275,7 +275,7 @@ export function ViewTools({
         ))}
         {activeId !== null && <button className="view-tab" onClick={() => onSelect(null)}>+ Quadro padrão</button>}
       </div>
-      {open && <>
+      <div id="project-view-controls-panel" className="project-view-content" hidden={!open}>
         <div className="project-view-controls">
           <label>Visualização
             <select value={layout} onChange={(event) => onLayout(event.target.value as ViewLayout)}>
@@ -329,7 +329,7 @@ export function ViewTools({
           <button onClick={() => { onSave(newName.trim() || undefined); setNewName(""); }}><Plus size={15} /> Salvar como nova</button>
           {activeId !== null && <>{activeOwned && <><button onClick={() => onSave()}><Save size={15} /> Salvar alterações</button><button onClick={onRename}><Pencil size={15} /> Renomear</button><button className="danger" onClick={onDelete}><Trash2 size={15} /> Excluir</button></>}<button onClick={onDuplicate}><Copy size={15} /> Duplicar</button></>}
         </div>
-      </>}
+      </div>
     </section>
   );
 }

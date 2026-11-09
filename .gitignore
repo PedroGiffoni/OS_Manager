@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 .env
 data/
+tmp/
+backend/tmp/
 node_modules/
 dist/
 playwright-report/

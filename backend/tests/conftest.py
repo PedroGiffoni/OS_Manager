@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.db import Base, get_db
 from app.main import app
-from app.models import Role, Permission, User, Supplier, Rate, KanbanColumn, Dashboard
+from app.models import Role, Permission, User, Supplier, Rate, KanbanColumn, Dashboard, Board, BoardMember
 from app.security import PERMISSIONS
 
 @pytest.fixture
@@ -77,6 +77,9 @@ def clients(tmp_path, monkeypatch):
             ]
         )
         db.flush()
+        db.add(Board(id=1, name="Quadro principal", description="Quadro de teste", author_id=1))
+        db.flush()
+        db.add_all([BoardMember(board_id=1, user_id=user_id, granted_by=1) for user_id in range(1, 6)])
         db.add_all(
             [
                 Supplier(id=1, name="Fornecedor exemplo", function="Dev", user_id=4),
