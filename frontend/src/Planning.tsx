@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Archive, CalendarPlus, Layers3, Plus, Rocket, X } from "lucide-react";
+import { Archive, CalendarPlus, Layers3, Plus, Rocket, X, Zap } from "lucide-react";
 import { api } from "./api";
 import { Empty, Label, type Run } from "./App";
+import { AutomationFlowBuilder } from "./AutomationFlowBuilder";
+import type { AutomationRule, AutomationRuleDraft, CapacityUser, WorkflowAction } from "./automationTypes";
 import type { Supplier } from "./types";
 
 type Release = { id: number; name: string; description: string; starts: string | null; due: string | null; released_at: string | null; archived: boolean; version: number };
@@ -11,14 +13,12 @@ type Component = { id: number; name: string; description: string; owner_id: numb
 type CapacityDay = { date: string; demand_minutes: number; suggested_demand_minutes: number; capacity_minutes: number; task_count: number; overload_minutes: number; suggested_overload_minutes: number };
 type CapacityShift = { task_id: number; title: string; from_date: string; to_date: string; minutes: number };
 type Capacity = { id: number; supplier_id: number | null; user_id: number | null; group_id: number | null; group_name: string | null; group_member_count: number | null; starts: string; ends: string; minutes: number; notes: string; demand_minutes: number; demand_tasks: number; unplanned_tasks: number; utilization_percent: number | null; overload_minutes: number; suggested_overload_minutes: number; levelable_minutes: number; suggested_shift_count: number; suggested_shifts: CapacityShift[]; daily: CapacityDay[]; leveling_plan_version: number; leveling_plan_active: boolean; leveling_plan_stale: boolean; leveling_plan_applied_at: string | null };
-type CapacityUser = { id: number; username: string; role: string };
 type CapacityGroup = { id: number; name: string; member_count: number };
 type WorkType = "epic" | "story" | "task" | "bug" | "subtask";
 type TypeRule = { enabled: boolean; roles: string[]; required_fields: string[]; conditions: WorkflowCondition[]; actions: WorkflowAction[] };
 type WorkflowCondition = { field: "approval" | "work_type" | "priority" | "supplier_assigned" | "label" | "due_set" | "due_overdue" | "due_within_days" | "parent_set" | "assignee" | "release_assigned" | "component_assigned" | "blocked" | "custom_field_equals"; operator: "eq" | "not_eq" | "gte" | "lte"; value: string | number | boolean; custom_field_id?: string };
-type WorkflowAction = { action: "set_priority" | "add_label" | "remove_label" | "add_comment" | "set_due_after_days" | "assign_internal_user" | "add_watcher" | "set_custom_fields"; config: Record<string, unknown> };
 type Transition = { id: number; source: string; target: string; enabled: boolean; roles: string[]; work_types: string[]; required_fields: string[]; type_rules: Partial<Record<WorkType, TypeRule>>; conditions: WorkflowCondition[]; actions: WorkflowAction[] };
-type Rule = { id: number; name: string; trigger: string; schedule_time: string | null; schedule_frequency: "daily" | "weekly"; schedule_weekdays: number[]; conditions: Record<string, unknown>; action: string; config: Record<string, any>; actions: WorkflowAction[]; enabled: boolean };
+type Rule = AutomationRule;
 type PlanningTab = "releases" | "components" | "capacity" | "workflow" | "automations";
 const planningTabs: PlanningTab[] = ["releases", "components", "capacity", "workflow", "automations"];
 type AutomationRun = { id: number; created_at: string; rule_id: number | null; rule_name: string; trigger: string; task_id: number; task_key: string; task_title: string; actor_name: string; changed_fields: string[]; comments_added: number; watchers_added: number; skipped_actions: number };
@@ -30,7 +30,8 @@ const conditionSummary = (condition: WorkflowCondition, users: CapacityUser[] = 
 };
 const actionSummary = (action: WorkflowAction, users: CapacityUser[] = []) => action.action === "set_priority" ? `prioridade ${action.config.priority}` : action.action === "add_label" ? `adicionar etiqueta ${action.config.text}` : action.action === "remove_label" ? `remover etiqueta ${action.config.text}` : action.action === "set_due_after_days" ? `prazo ${action.config.days} dias após criação` : action.action === "assign_internal_user" ? `responsável ${users.find((user) => user.id === action.config.user_id)?.username ?? `#${action.config.user_id}`}` : action.action === "add_watcher" ? `observador ${users.find((user) => user.id === action.config.user_id)?.username ?? `#${action.config.user_id}`}` : action.action === "set_custom_fields" ? `atualizar campos ${Object.keys((action.config.values as Record<string, unknown>) ?? {}).join(", ")}` : `comentário “${action.config.body}”`;
 const automationActionSummary = actionSummary;
-const weekdayOptions = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+const automationTriggerNames: Record<string, string> = { card_created: "Card criado", task_updated: "Card editado", field_changed: "Valor do campo alterado", assignee_changed: "Responsável ou fornecedor alterado", due_changed: "Prazo alterado", priority_changed: "Prioridade alterada", status_changed: "Card transicionado", comment_added: "Comentário adicionado", attachment_added: "Anexo adicionado", link_added: "Relação entre cards criada", link_removed: "Relação entre cards removida", hours_submitted: "Horas enviadas", hours_decided: "Horas aprovadas ou rejeitadas", sprint_started: "Sprint iniciada", sprint_completed: "Sprint encerrada", sprint_scope_changed: "Card adicionado ou removido da sprint", development_event: "Evento de desenvolvimento", scheduled_daily: "Agendamento recorrente" };
+const triggerOptionsLabel = (trigger: string, frequency?: "daily" | "weekly", time?: string | null) => trigger === "scheduled_daily" ? `${frequency === "weekly" ? "Semanal" : "Diariamente"} às ${time ?? "09:00"} UTC` : automationTriggerNames[trigger] ?? trigger;
 const dateToday = () => new Date().toISOString().slice(0, 10);
 const validCustomFieldValues = (raw: string) => {
   try {
@@ -41,6 +42,15 @@ const validCustomFieldValues = (raw: string) => {
         && (item === null || typeof item === "string" && item.length <= 10000
           || typeof item === "boolean" || typeof item === "number" && Number.isFinite(item)));
   } catch { return false; }
+};
+
+const initialAutomationRule: AutomationRuleDraft = {
+  name: "", trigger: "status_changed", schedule_time: "09:00", schedule_frequency: "daily", schedule_weekdays: [],
+  action: "set_priority", priority: "0", label: "", comment: "", due_days: "14", assignee_user: "",
+  custom_field_values: "{}", assignee_filter: "", due_window: "", overdue: "", color: "#2B4EDA",
+  statuses: "", work_types: "", approval_states: "", priority_min: "", priority_max: "", labels: "", due_set: "",
+  release_assigned: "", component_assigned: "", blocked: "", development_providers: "", development_event_types: "",
+  development_states: "", comment_contains: "", attachment_media_types: "", link_types: "", changed_fields: "", sprint_scope_action: "",
 };
 
 export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAutomation, run }: { suppliers: Supplier[]; canPlan: boolean; canCapacity: boolean; canWorkflow: boolean; canAutomation: boolean; run: Run }) {
@@ -66,11 +76,12 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
   const [conditionDraft, setConditionDraft] = useState<WorkflowCondition>({ field: "approval", operator: "eq", value: "approved" });
   const [workflowCustomFieldDraft, setWorkflowCustomFieldDraft] = useState({ id: "", value: '""' });
   const [actionDraft, setActionDraft] = useState({ action: "add_comment" as WorkflowAction["action"], value: "", color: "#2B4EDA", custom_field_values: "{}" });
-  const [rule, setRule] = useState({ name: "", trigger: "status_changed", schedule_time: "09:00", schedule_frequency: "daily" as "daily" | "weekly", schedule_weekdays: [] as number[], action: "set_priority", priority: "0", label: "", comment: "", due_days: "14", assignee_user: "", custom_field_values: "{}", assignee_filter: "", due_window: "", overdue: "", color: "#2B4EDA", statuses: "", work_types: "", approval_states: "", priority_min: "", priority_max: "", labels: "", due_set: "", release_assigned: "", component_assigned: "", blocked: "", development_providers: "", development_event_types: "", development_states: "", comment_contains: "", attachment_media_types: "", link_types: "", changed_fields: "", sprint_scope_action: "" });
+  const [rule, setRule] = useState<AutomationRuleDraft>(initialAutomationRule);
   const [automationActions, setAutomationActions] = useState<WorkflowAction[]>([]);
   const [customFieldsJson, setCustomFieldsJson] = useState("");
   const [actionDraftDirty, setActionDraftDirty] = useState(false);
   const [editingAutomationId, setEditingAutomationId] = useState<number | null>(null);
+  const [automationBuilderOpen, setAutomationBuilderOpen] = useState(false);
   const [automationEnabled, setAutomationEnabled] = useState(true);
   const [automationRunOffset, setAutomationRunOffset] = useState(0);
   const releases = useQuery({ queryKey: ["releases"], queryFn: () => api<Release[]>("/releases") });
@@ -159,20 +170,11 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
     const existing = current.type_rules[typeRuleDraft.type] ?? { enabled: true, roles: [], required_fields: [], conditions: [], actions: [] };
     return { ...current, type_rules: { ...current.type_rules, [typeRuleDraft.type]: { ...existing, actions: [...(existing.actions ?? []), buildWorkflowAction()] } } };
   });
-  const buildAutomationAction = (): WorkflowAction => ({
-    action: rule.action as WorkflowAction["action"],
-    config: rule.action === "set_priority" ? { priority: Number(rule.priority) } : rule.action === "add_label" ? { text: rule.label, color: rule.color } : rule.action === "remove_label" ? { text: rule.label } : rule.action === "set_due_after_days" ? { days: Number(rule.due_days) } : rule.action === "assign_internal_user" || rule.action === "add_watcher" ? { user_id: Number(rule.assignee_user) } : rule.action === "set_custom_fields" ? { values: JSON.parse(rule.custom_field_values) as Record<string, unknown> } : { body: rule.comment },
-  });
-  const appendAutomationAction = () => {
-    setAutomationActions((current) => [...current, buildAutomationAction()]);
-    setActionDraftDirty(false);
-  };
-  const removeAutomationAction = (index: number) => setAutomationActions((current) => current.filter((_, itemIndex) => itemIndex !== index));
   const saveAutomation = () => run(async () => {
     if (rule.trigger === "scheduled_daily" && rule.schedule_frequency === "weekly" && !rule.schedule_weekdays.length) throw new Error("Selecione ao menos um dia para a recorrência semanal.");
     const actions = [...automationActions];
-    if (actionDraftDirty || (actions.length === 0 && !editingAutomationId)) actions.push(buildAutomationAction());
     if (!actions.length) throw new Error("Adicione ao menos uma ação à automação.");
+    if (actions.length > 10) throw new Error("Cada regra pode ter até 10 ações.");
     const conditions = {
       ...(rule.statuses.trim() ? { statuses: rule.statuses.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
       ...(rule.work_types.trim() ? { work_types: rule.work_types.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
@@ -187,9 +189,9 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
       ...(rule.release_assigned !== "" ? { release_assigned: rule.release_assigned === "true" } : {}),
       ...(rule.component_assigned !== "" ? { component_assigned: rule.component_assigned === "true" } : {}),
       ...(rule.blocked !== "" ? { blocked: rule.blocked === "true" } : {}),
-      ...(rule.development_providers.trim() ? { development_providers: rule.development_providers.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
-      ...(rule.development_event_types.trim() ? { development_event_types: rule.development_event_types.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
-      ...(rule.development_states.trim() ? { development_states: rule.development_states.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
+      ...(rule.trigger === "development_event" && rule.development_providers.trim() ? { development_providers: rule.development_providers.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
+      ...(rule.trigger === "development_event" && rule.development_event_types.trim() ? { development_event_types: rule.development_event_types.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
+      ...(rule.trigger === "development_event" && rule.development_states.trim() ? { development_states: rule.development_states.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
       ...(rule.trigger === "comment_added" && rule.comment_contains.trim() ? { comment_contains: rule.comment_contains.trim() } : {}),
       ...(rule.trigger === "attachment_added" && rule.attachment_media_types.trim() ? { attachment_media_types: rule.attachment_media_types.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
       ...(["link_added", "link_removed"].includes(rule.trigger) && rule.link_types.trim() ? { link_types: rule.link_types.split(",").map((x) => x.trim()).filter(Boolean) } : {}),
@@ -215,7 +217,8 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
     setAutomationActions([]);
     setCustomFieldsJson("");
     setActionDraftDirty(false);
-    setRule({ name: "", trigger: "status_changed", schedule_time: "09:00", schedule_frequency: "daily", schedule_weekdays: [], action: "set_priority", priority: "0", label: "", comment: "", due_days: "14", assignee_user: "", custom_field_values: "{}", assignee_filter: "", due_window: "", overdue: "", color: "#2B4EDA", statuses: "", work_types: "", approval_states: "", priority_min: "", priority_max: "", labels: "", due_set: "", release_assigned: "", component_assigned: "", blocked: "", development_providers: "", development_event_types: "", development_states: "", comment_contains: "", attachment_media_types: "", link_types: "", changed_fields: "", sprint_scope_action: "" });
+    setRule(initialAutomationRule);
+    setAutomationBuilderOpen(false);
   });
   const editAutomation = (row: Rule) => {
     const list = (key: string) => Array.isArray(row.conditions[key]) ? (row.conditions[key] as string[]).join(",") : "";
@@ -228,7 +231,7 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
       schedule_time: row.schedule_time ?? "09:00",
       schedule_frequency: row.schedule_frequency ?? "daily",
       schedule_weekdays: row.schedule_weekdays ?? [],
-      action: row.actions?.at(-1)?.action ?? row.action,
+      action: (row.actions?.at(-1)?.action ?? row.action) as AutomationRuleDraft["action"],
       priority: String(row.config.priority ?? 0),
       label: String(row.config.text ?? ""),
       comment: String(row.config.body ?? ""),
@@ -266,6 +269,16 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
     if (lastAction.action === "assign_internal_user" || lastAction.action === "add_watcher") setRule((current) => ({ ...current, assignee_user: String(lastAction.config.user_id ?? "") }));
     setAutomationEnabled(row.enabled);
     setEditingAutomationId(row.id);
+    setAutomationBuilderOpen(true);
+  };
+  const createAutomation = () => {
+    setRule(initialAutomationRule);
+    setAutomationActions([]);
+    setCustomFieldsJson("");
+    setActionDraftDirty(false);
+    setAutomationEnabled(true);
+    setEditingAutomationId(null);
+    setAutomationBuilderOpen(true);
   };
   const actionsAllowed = canPlan || canCapacity || canWorkflow || canAutomation;
   return <section className="planning-page">
@@ -377,57 +390,43 @@ export function Planning({ suppliers, canPlan, canCapacity, canWorkflow, canAuto
       </section>
       {transitions.isPending ? <Empty>Carregando transições…</Empty> : transitions.isError ? <Empty>{transitions.error.message}</Empty> : <div className="planning-list">{transitions.data.map((row) => <article className="planning-item panel" key={row.id}><div><strong>{row.source} → {row.target}</strong><p>Regra base · perfis: {row.roles.length ? row.roles.join(", ") : "fluxo padrão"} · tipos: {row.work_types.length ? row.work_types.join(", ") : "todos"}</p><small>Campos base: {row.required_fields.join(", ") || "nenhum"} · condições: {row.conditions?.length ?? 0} · ações: {row.actions?.length ?? 0}</small>{Object.entries(row.type_rules ?? {}).map(([type, policy]) => <small key={type}>{type}: {policy.enabled ? "permitida" : "bloqueada"} · perfis {policy.roles.join(", ") || "base"} · campos {policy.required_fields.join(", ") || "nenhum"}</small>)}</div><div className="actions"><button onClick={() => editTransition(row)}>Editar</button><button onClick={() => run(() => api(`/workflows/transitions/${row.id}`, "PUT", { ...row, enabled: !row.enabled }))}>{row.enabled ? "Desativar" : "Ativar"}</button><button className="danger" onClick={() => run(() => api(`/workflows/transitions/${row.id}`, "DELETE"))}><X size={15} /> Remover</button></div></article>)}</div>}
     </div>}
-    {tab === "automations" && canAutomation && <div className="planning-layout">
-      <section className="panel">
-        <h3>{editingAutomationId ? "Editar automação" : "Criar automação"}</h3>
-        <p>Regras seguras rodam em eventos de cards e sprints (incluindo entrada e retorno ao backlog) ou diariamente no horário UTC definido. Comentários podem ser filtrados por trecho de texto e anexos por tipo de mídia. Os filtros gerais também consideram status, aprovação, prioridade, responsável, release, componente e dependências bloqueadoras. Cada regra pode encadear até dez ações ordenadas.</p>
-        <div className="form-grid">
-          <Label title="Nome"><input value={rule.name} onChange={(e) => setRule({ ...rule, name: e.target.value })} /></Label>
-          <Label title="Gatilho"><select value={rule.trigger} onChange={(e) => setRule({ ...rule, trigger: e.target.value })}><option value="card_created">Card criado</option><option value="task_updated">Card editado</option><option value="field_changed">Campo específico alterado</option><option value="assignee_changed">Responsável ou fornecedor alterado</option><option value="due_changed">Prazo alterado</option><option value="priority_changed">Prioridade alterada</option><option value="status_changed">Etapa alterada</option><option value="comment_added">Comentário adicionado</option><option value="attachment_added">Anexo adicionado</option><option value="link_added">Relação entre cards criada</option><option value="link_removed">Relação entre cards removida</option><option value="hours_submitted">Horas enviadas</option><option value="hours_decided">Horas aprovadas/rejeitadas</option><option value="sprint_started">Sprint iniciada</option><option value="sprint_completed">Sprint encerrada</option><option value="sprint_scope_changed">Card adicionado/removido da sprint</option><option value="development_event">Evento de GitHub, GitLab ou Bitbucket</option><option value="scheduled_daily">Agendamento recorrente</option></select></Label>
-          {rule.trigger === "sprint_scope_changed" && <Label title="Filtrar mudança de escopo"><select value={rule.sprint_scope_action} onChange={(e) => setRule({ ...rule, sprint_scope_action: e.target.value })}><option value="">Adicionada ou removida</option><option value="added">Adicionada</option><option value="removed">Removida</option></select></Label>}
-          {rule.trigger === "field_changed" && <Label title="Campos que disparam (opcional; separados por vírgula)"><input value={rule.changed_fields} onChange={(e) => setRule({ ...rule, changed_fields: e.target.value })} placeholder="priority, due, area" /><small>Use IDs de campos estruturais ou personalizados. Vazio significa qualquer campo alterado.</small></Label>}
-          {rule.trigger === "comment_added" && <Label title="Executar somente se o comentário contiver (opcional)"><input maxLength={200} value={rule.comment_contains} onChange={(e) => setRule({ ...rule, comment_contains: e.target.value })} placeholder="Ex.: urgente" /></Label>}
-          {rule.trigger === "attachment_added" && <Label title="Tipos de mídia permitidos (opcional, separados por vírgula)"><input value={rule.attachment_media_types} onChange={(e) => setRule({ ...rule, attachment_media_types: e.target.value })} placeholder="application/pdf, image/png" /><small>Permitidos: PDF, PNG, JPEG e texto simples.</small></Label>}
-          {["link_added", "link_removed"].includes(rule.trigger) && <Label title="Tipos de relação (opcional, separados por vírgula)"><input value={rule.link_types} onChange={(e) => setRule({ ...rule, link_types: e.target.value })} placeholder="blocks, relates, duplicates" /><small>Use: blocks, relates ou duplicates.</small></Label>}
-          {rule.trigger === "scheduled_daily" && <Label title="Horário da rotina (UTC)"><input type="time" value={rule.schedule_time} onChange={(e) => setRule({ ...rule, schedule_time: e.target.value })} /></Label>}
-          {rule.trigger === "scheduled_daily" && <Label title="Recorrência"><select value={rule.schedule_frequency} onChange={(e) => setRule({ ...rule, schedule_frequency: e.target.value as "daily" | "weekly", schedule_weekdays: e.target.value === "weekly" ? rule.schedule_weekdays : [] })}><option value="daily">Todos os dias</option><option value="weekly">Semanalmente</option></select></Label>}
-          {rule.trigger === "scheduled_daily" && rule.schedule_frequency === "weekly" && <fieldset className="automation-weekdays"><legend>Executar nestes dias (UTC)</legend>{weekdayOptions.map((day, index) => <label key={day}><input type="checkbox" checked={rule.schedule_weekdays.includes(index)} onChange={(event) => setRule({ ...rule, schedule_weekdays: event.target.checked ? [...rule.schedule_weekdays, index].sort() : rule.schedule_weekdays.filter((value) => value !== index) })} />{day}</label>)}</fieldset>}
-          {rule.trigger === "development_event" && <>
-            <Label title="Provedores (opcional; separados por vírgula)"><input value={rule.development_providers} onChange={(e) => setRule({ ...rule, development_providers: e.target.value })} placeholder="github, gitlab, bitbucket" /></Label>
-            <Label title="Tipos de evento (opcional; separados por vírgula)"><input value={rule.development_event_types} onChange={(e) => setRule({ ...rule, development_event_types: e.target.value })} placeholder="push, pull_request, workflow_run" /></Label>
-            <Label title="Estados (opcional; separados por vírgula)"><input value={rule.development_states} onChange={(e) => setRule({ ...rule, development_states: e.target.value })} placeholder="success, failure, merged" /></Label>
-          </>}
-          <Label title="Ação que está sendo configurada"><select value={rule.action} onChange={(e) => { setRule({ ...rule, action: e.target.value }); setActionDraftDirty(true); }}><option value="set_priority">Definir prioridade</option><option value="add_label">Adicionar etiqueta</option><option value="remove_label">Remover etiqueta</option><option value="add_comment">Adicionar comentário</option><option value="set_due_after_days">Definir prazo após criação</option><option value="assign_internal_user">Atribuir responsável interno</option><option value="add_watcher">Adicionar observador interno</option><option value="set_custom_fields">Definir campos personalizados</option></select></Label>
-          {rule.action === "set_custom_fields" ? <Label title="Valores por ID do campo (JSON)"><textarea rows={4} value={rule.custom_field_values} onChange={(e) => { setRule({ ...rule, custom_field_values: e.target.value }); setActionDraftDirty(true); }} placeholder={'{"area": "Operações"}'} /><small>Atualiza campos simples existentes e permitidos para o perfil da regra. Cada alteração fica versionada e auditada.</small></Label> : rule.action === "set_priority" ? <Label title="Prioridade numérica"><input type="number" value={rule.priority} onChange={(e) => { setRule({ ...rule, priority: e.target.value }); setActionDraftDirty(true); }} /></Label> : rule.action === "add_label" || rule.action === "remove_label" ? <><Label title="Texto da etiqueta"><input maxLength={40} value={rule.label} onChange={(e) => { setRule({ ...rule, label: e.target.value }); setActionDraftDirty(true); }} /></Label>{rule.action === "add_label" && <Label title="Cor"><input type="color" value={rule.color} onChange={(e) => { setRule({ ...rule, color: e.target.value }); setActionDraftDirty(true); }} /></Label>}</> : rule.action === "set_due_after_days" ? <Label title="Dias corridos após a criação (0 a 3.650)"><input type="number" min="0" max="3650" value={rule.due_days} onChange={(e) => { setRule({ ...rule, due_days: e.target.value }); setActionDraftDirty(true); }} /></Label> : rule.action === "assign_internal_user" || rule.action === "add_watcher" ? <Label title={rule.action === "add_watcher" ? "Observador interno" : "Responsável interno"}><select value={rule.assignee_user} onChange={(e) => { setRule({ ...rule, assignee_user: e.target.value }); setActionDraftDirty(true); }}><option value="">Selecione uma pessoa</option>{(workflowAssignees.data ?? []).map((person) => <option key={person.id} value={person.id}>{person.username}</option>)}</select></Label> : <Label title="Comentário automático"><textarea maxLength={1000} rows={3} value={rule.comment} onChange={(e) => { setRule({ ...rule, comment: e.target.value }); setActionDraftDirty(true); }} /></Label>}
-          <section className="automation-action-sequence" aria-label="Sequência de ações">
-            <strong>Sequência da regra · {automationActions.length} ação(ões)</strong>
-            {automationActions.length > 0 && <ol>{automationActions.map((action, index) => <li key={`${action.action}-${index}`}>{index + 1}. {automationActionSummary(action, workflowAssignees.data ?? [])} <button type="button" onClick={() => removeAutomationAction(index)}>Remover</button></li>)}</ol>}
-            <button type="button" disabled={(!actionDraftDirty && automationActions.length > 0) || (rule.action === "set_custom_fields" ? !validCustomFieldValues(rule.custom_field_values) : (["assign_internal_user", "add_watcher"].includes(rule.action) && !rule.assignee_user))} onClick={appendAutomationAction}><Plus size={16} /> Adicionar ação configurada à sequência</button>
-          </section>
-          <Label title="Somente nestes status (opcional, vírgulas)"><input value={rule.statuses} onChange={(e) => setRule({ ...rule, statuses: e.target.value })} placeholder="todo,production" /></Label>
-          <Label title="Somente nestes tipos (opcional, vírgulas)"><input value={rule.work_types} onChange={(e) => setRule({ ...rule, work_types: e.target.value })} placeholder="bug,task" /></Label>
-          <Label title="Somente nestes estados de aprovação (opcional)"><input value={rule.approval_states} onChange={(e) => setRule({ ...rule, approval_states: e.target.value })} placeholder="approved,rejected" /></Label>
-          <Label title="Prioridade mínima (opcional)"><input type="number" value={rule.priority_min} onChange={(e) => setRule({ ...rule, priority_min: e.target.value })} /></Label>
-          <Label title="Prioridade máxima (opcional)"><input type="number" value={rule.priority_max} onChange={(e) => setRule({ ...rule, priority_max: e.target.value })} /></Label>
-          <Label title="Exige uma destas etiquetas (opcional, vírgulas)"><input value={rule.labels} onChange={(e) => setRule({ ...rule, labels: e.target.value })} placeholder="Urgente, UX" /></Label>
-          <Label title="Filtro de prazo"><select value={rule.due_set} onChange={(e) => setRule({ ...rule, due_set: e.target.value })}><option value="">Com ou sem prazo</option><option value="true">Somente cards com prazo</option><option value="false">Somente cards sem prazo</option></select></Label>
-          <Label title="Prazo nos próximos dias (UTC, opcional)"><input type="number" min="0" max="3650" value={rule.due_window} onChange={(e) => setRule({ ...rule, due_window: e.target.value })} placeholder="Ex.: 7" /></Label>
-          <Label title="Situação de atraso"><select value={rule.overdue} onChange={(e) => setRule({ ...rule, overdue: e.target.value })}><option value="">Qualquer situação</option><option value="true">Somente atrasados</option><option value="false">Somente não atrasados</option></select></Label>
-          <Label title="Filtro de release"><select value={rule.release_assigned} onChange={(e) => setRule({ ...rule, release_assigned: e.target.value })}><option value="">Com ou sem release</option><option value="true">Somente cards vinculados a release</option><option value="false">Somente cards sem release</option></select></Label>
-          <Label title="Filtro de componente"><select value={rule.component_assigned} onChange={(e) => setRule({ ...rule, component_assigned: e.target.value })}><option value="">Com ou sem componente</option><option value="true">Somente cards com componente</option><option value="false">Somente cards sem componente</option></select></Label>
-          <Label title="Filtro de dependência"><select value={rule.blocked} onChange={(e) => setRule({ ...rule, blocked: e.target.value })}><option value="">Bloqueados ou não</option><option value="true">Somente bloqueados por item pendente</option><option value="false">Somente não bloqueados</option></select></Label>
-          <Label title="Campos personalizados por ID e valor (JSON, opcional)"><textarea rows={3} value={customFieldsJson} onChange={(event) => setCustomFieldsJson(event.target.value)} placeholder={'{"area": "Operações", "urgente": true}'} /><small>Use até 10 campos já definidos no card. Os valores são comparados por tipo e não são incluídos na auditoria da automação.</small></Label>
-          <Label title="Filtrar por responsável interno"><select value={rule.assignee_filter} onChange={(e) => setRule({ ...rule, assignee_filter: e.target.value })}><option value="">Qualquer responsável</option>{(workflowAssignees.data ?? []).map((person) => <option key={person.id} value={person.id}>{person.username}</option>)}</select></Label>
-          <button className="primary" disabled={!rule.name.trim() || (!!editingAutomationId && !automationActions.length && !actionDraftDirty)} onClick={saveAutomation}><Plus size={16} /> {editingAutomationId ? "Salvar alterações" : "Criar automação"}</button>
-          {editingAutomationId && <button type="button" onClick={() => { setCustomFieldsJson(""); setEditingAutomationId(null); setAutomationEnabled(true); setAutomationActions([]); setActionDraftDirty(false); setRule({ name: "", trigger: "status_changed", schedule_time: "09:00", schedule_frequency: "daily", schedule_weekdays: [], action: "set_priority", priority: "0", label: "", comment: "", due_days: "14", assignee_user: "", custom_field_values: "{}", assignee_filter: "", due_window: "", overdue: "", color: "#2B4EDA", statuses: "", work_types: "", approval_states: "", priority_min: "", priority_max: "", labels: "", due_set: "", release_assigned: "", component_assigned: "", blocked: "", development_providers: "", development_event_types: "", development_states: "", comment_contains: "", attachment_media_types: "", link_types: "", changed_fields: "", sprint_scope_action: "" }); }}>Cancelar edição</button>}
-        </div>
-      </section>
-      <section className="panel automation-run-log">
-        <div className="section-heading"><div><h3>Histórico de execuções</h3><p>Registro recente das ações automáticas, atualizado periodicamente. Valores de campos e comentários não são exibidos.</p></div></div>
-        {automationRuns.isPending ? <Empty>Carregando execuções…</Empty> : automationRuns.isError ? <Empty>{automationRuns.error.message}</Empty> : !automationRuns.data.length ? <Empty>Nenhuma execução registrada ainda.</Empty> : <div className="planning-list">{automationRuns.data.map((entry) => <article className="planning-item" key={entry.id}><div><strong>{entry.rule_name} · {entry.task_key}</strong><p>{entry.task_title}</p><small>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.created_at))} · {entry.actor_name} · gatilho: {entry.trigger}</small><small>{entry.changed_fields.length ? `Campos alterados: ${entry.changed_fields.join(", ")}` : "Sem alteração de campo"}{entry.comments_added ? ` · ${entry.comments_added} comentário(s)` : ""}{entry.watchers_added ? ` · ${entry.watchers_added} observador(es)` : ""}{entry.skipped_actions ? ` · ${entry.skipped_actions} ação(ões) ignorada(s)` : ""}</small></div></article>)}</div>}
-        <div className="actions"><button disabled={automationRunOffset === 0} onClick={() => setAutomationRunOffset((value) => Math.max(0, value - 25))}>Mais recentes</button><button disabled={!automationRuns.data || automationRuns.data.length < 25} onClick={() => setAutomationRunOffset((value) => value + 25)}>Anteriores</button></div>
-      </section>
-        {automations.isPending ? <Empty>Carregando automações…</Empty> : automations.isError ? <Empty>{automations.error.message}</Empty> : !automations.data.length ? <Empty>Nenhuma automação configurada.</Empty> : <div className="planning-list">{automations.data.map((row) => <article className="planning-item panel" key={row.id}><div><strong>{row.name}</strong><p>{{card_created:"Card criado",task_updated:"Card editado",field_changed:"Campo específico alterado",assignee_changed:"Responsável ou fornecedor alterado",due_changed:"Prazo alterado",priority_changed:"Prioridade alterada",status_changed:"Etapa alterada",comment_added:"Comentário adicionado",attachment_added:"Anexo adicionado",link_added:"Relação criada",link_removed:"Relação removida",hours_submitted:"Horas enviadas",hours_decided:"Horas decididas",sprint_started:"Sprint iniciada",sprint_completed:"Sprint encerrada",sprint_scope_changed:"Card adicionado/removido da sprint",development_event:"Evento de desenvolvimento",scheduled_daily:row.schedule_frequency === "weekly" ? `Semanal às ${row.schedule_time ?? "--:--"} UTC · ${(row.schedule_weekdays ?? []).map((day) => weekdayOptions[day]).join(", ")}` : `Diária às ${row.schedule_time ?? "--:--"} UTC`}[row.trigger] ?? row.trigger} · {(row.actions?.length ? row.actions : [{ action: row.action as WorkflowAction["action"], config: row.config }]).map((action) => automationActionSummary(action, workflowAssignees.data ?? [])).join(" → ")}</p><small>{row.enabled ? "Ativa" : "Desativada"}</small></div><div className="actions"><button onClick={() => editAutomation(row)}>Editar</button><button onClick={() => run(() => api(`/automations/${row.id}`, "PUT", { ...row, enabled: !row.enabled }))}>{row.enabled ? "Desativar" : "Ativar"}</button><button className="danger" onClick={() => run(() => api(`/automations/${row.id}`, "DELETE"))}><X size={15} /> Remover</button></div></article>)}</div>}
-    </div>}
+    {tab === "automations" && canAutomation && (automationBuilderOpen
+      ? <AutomationFlowBuilder
+          rule={rule}
+          setRule={setRule}
+          actions={automationActions}
+          setActions={setAutomationActions}
+          enabled={automationEnabled}
+          setEnabled={setAutomationEnabled}
+          actionDraftDirty={actionDraftDirty}
+          setActionDraftDirty={setActionDraftDirty}
+          customFieldsJson={customFieldsJson}
+          setCustomFieldsJson={setCustomFieldsJson}
+          users={workflowAssignees.data ?? []}
+          editingId={editingAutomationId}
+          onSave={saveAutomation}
+          onCancel={() => { setAutomationBuilderOpen(false); setEditingAutomationId(null); }}
+        />
+      : <>
+        <section className="panel automation-rules-overview">
+          <div className="section-heading">
+            <div><span className="eyebrow">REGRAS DE FLUXO</span><h3>Automações</h3><p>Crie fluxos visuais com gatilho, condições e ações para os cards e sprints.</p></div>
+            <button type="button" className="primary" onClick={createAutomation}><Plus size={16} /> Criar automação</button>
+          </div>
+          {automations.isPending ? <Empty>Carregando automações…</Empty>
+            : automations.isError ? <Empty>{automations.error.message}</Empty>
+              : !automations.data.length ? <div className="automation-empty-state"><span><Zap size={22} /></span><strong>Nenhuma automação configurada</strong><p>Monte seu primeiro fluxo escolhendo o que o inicia, quais condições deve atender e o que acontece em seguida.</p><button type="button" className="primary" onClick={createAutomation}><Plus size={16} /> Criar automação</button></div>
+                : <div className="planning-list">{automations.data.map((row) => <article className="planning-item panel automation-rule-row" key={row.id}>
+                  <div className="automation-rule-status" aria-label={row.enabled ? "Automação ativa" : "Automação desativada"}><span className={row.enabled ? "active" : ""} /></div>
+                  <div className="automation-rule-description"><strong>{row.name}</strong><p>{triggerOptionsLabel(row.trigger, row.schedule_frequency, row.schedule_time)} · {(row.actions?.length ? row.actions : [{ action: row.action as WorkflowAction["action"], config: row.config }]).map((action) => automationActionSummary(action, workflowAssignees.data ?? [])).join(" → ")}</p><small>{row.enabled ? "Ativa" : "Desativada"} · {Object.keys(row.conditions ?? {}).length} filtro(s)</small></div>
+                  <div className="actions"><button type="button" onClick={() => editAutomation(row)}>Editar</button><button type="button" onClick={() => run(() => api(`/automations/${row.id}`, "PUT", { ...row, enabled: !row.enabled }))}>{row.enabled ? "Desativar" : "Ativar"}</button><button type="button" className="danger" onClick={() => run(() => api(`/automations/${row.id}`, "DELETE"))}><X size={15} /> Remover</button></div>
+                </article>)}</div>}
+        </section>
+        <section className="panel automation-run-log">
+          <div className="section-heading"><div><h3>Histórico de execuções</h3><p>Registro recente das ações automáticas. Conteúdo de campos e comentários é omitido.</p></div></div>
+          {automationRuns.isPending ? <Empty>Carregando execuções…</Empty> : automationRuns.isError ? <Empty>{automationRuns.error.message}</Empty> : !automationRuns.data.length ? <Empty>Nenhuma execução registrada ainda.</Empty> : <div className="planning-list">{automationRuns.data.map((entry) => <article className="planning-item" key={entry.id}><div><strong>{entry.rule_name} · {entry.task_key}</strong><p>{entry.task_title}</p><small>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.created_at))} · {entry.actor_name} · gatilho: {entry.trigger}</small><small>{entry.changed_fields.length ? `Campos alterados: ${entry.changed_fields.join(", ")}` : "Sem alteração de campo"}{entry.comments_added ? ` · ${entry.comments_added} comentário(s)` : ""}{entry.watchers_added ? ` · ${entry.watchers_added} observador(es)` : ""}{entry.skipped_actions ? ` · ${entry.skipped_actions} ação(ões) ignorada(s)` : ""}</small></div></article>)}</div>}
+          <div className="actions"><button disabled={automationRunOffset === 0} onClick={() => setAutomationRunOffset((value) => Math.max(0, value - 25))}>Mais recentes</button><button disabled={!automationRuns.data || automationRuns.data.length < 25} onClick={() => setAutomationRunOffset((value) => value + 25)}>Anteriores</button></div>
+        </section>
+      </>)}
   </section>;
 }
