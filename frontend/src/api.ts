@@ -75,3 +75,17 @@ export async function upload(path: string, file: File) {
   }
   return response.json();
 }
+
+export async function uploadImage(path: string, file: File) {
+  const response = await fetch("/api/v1" + path, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": file.type, "X-CSRF-Token": csrf },
+    body: file,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail?.message ?? "Não foi possível atualizar a foto.");
+  }
+  return response.json();
+}

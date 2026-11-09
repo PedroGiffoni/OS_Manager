@@ -40,6 +40,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(ForeignKey("roles.id"))
     grants: Mapped[list] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    contact_email: Mapped[str | None] = mapped_column(String(254), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    profile_photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    profile_photo_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    profile_photo_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class Session(Base):

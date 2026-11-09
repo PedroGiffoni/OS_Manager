@@ -6,6 +6,8 @@ Base `/api/v1`. Esquema OpenAPI em `/api/openapi.json` e interface `/api/docs` n
 | --- | --- | --- |
 | POST | /auth/login, /auth/logout | Entrada individual e revogação da sessão |
 | GET | /auth/me, /config | Conta, permissões atuais, CSRF e timezone |
+| GET/PUT | /me/profile | Consulta e atualiza nome de exibição e contatos da própria conta |
+| GET/PUT/DELETE | /me/profile/photo | Foto própria em JPG, PNG ou WebP, até 2 MiB; upload auditado |
 | GET/POST | /users | Administração de contas |
 | GET | /permissions | Catálogo de concessões |
 | PUT | /users/{id}/grants | Conceder/revogar acessos, administrador |

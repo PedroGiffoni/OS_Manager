@@ -26,15 +26,19 @@ import {
   Gauge,
   GitBranch,
   Zap,
+  ChevronDown,
+  UserRound,
+  Camera,
 } from "lucide-react";
 import type { Account } from "./types";
 import { useTheme } from "./useTheme";
-import { api } from "./api";
+import { api, uploadImage } from "./api";
 import { pushEndpointDigest, vapidKeyToUint8Array } from "./push";
 
 type Notice = { id: number; task_id: number; task_title: string; action: string; source_label?: string | null; actor: string; created_at: string; read: boolean };
 type NotificationPreferences = { email: string; email_enabled: boolean; email_delivery_configured: boolean };
 type PushConfiguration = { available: boolean; public_key: string | null; device_count: number; device_limit: number; active_on_this_browser: boolean };
+type UserProfile = { username: string; display_name: string; contact_email: string; contact_phone: string; photo_url: string | null };
 const actionLabels: Record<string, string> = {
   status_changed: "alterou a etapa",
   hours_submitted: "enviou horas",
@@ -61,10 +65,14 @@ const roleNames: Record<string, string> = {
 function Navigation({
   account,
   collapsed = false,
+  configurationOpen,
+  toggleConfiguration,
   onNavigate,
 }: {
   account: Account;
   collapsed?: boolean;
+  configurationOpen: boolean;
+  toggleConfiguration: () => void;
   onNavigate?: () => void;
 }) {
   const [search, setSearch] = useState("");
@@ -164,9 +172,9 @@ function Navigation({
     },
     {
       to: "/administracao",
-      label: "Administração",
+      label: "Administração e permissões",
       icon: Settings2,
-      group: "Gestão",
+      group: "Configuração",
       visible: account.permissions.includes("manage_users"),
     },
   ].filter(
@@ -191,14 +199,17 @@ function Navigation({
         </div>
       )}
       <nav aria-label="Menu principal">
-        {["Operação", "Gestão", "Configuração"].map((group) => (
-          <div className="nav-group" key={group}>
-            {!collapsed && items.some((item) => item.group === group) && (
-              <p className="nav-group-label">{group}</p>
-            )}
-            {items
-              .filter((item) => item.group === group)
-              .map(({ to, label, icon: Icon }) => (
+        {["Operação", "Gestão", "Configuração"].map((group) => {
+          const links = items.filter((item) => item.group === group);
+          if (!links.length) return null;
+          return <div className="nav-group" key={group}>
+            {group === "Configuração" ? <button type="button" className="nav-group-toggle" aria-expanded={configurationOpen} aria-label={collapsed ? "Configuração" : undefined} title={collapsed ? "Configuração" : undefined} onClick={toggleConfiguration}>
+              <Settings2 size={20} aria-hidden="true" />
+              <span className={collapsed ? "sr-only" : ""}>Configuração</span>
+              <ChevronDown className={`nav-group-chevron${configurationOpen ? " open" : ""}`} size={16} aria-hidden="true" />
+            </button> : !collapsed && <p className="nav-group-label">{group}</p>}
+            <div hidden={group === "Configuração" && !configurationOpen}>
+              {links.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   end={to === "/" || to.startsWith("/planejamento?")}
                   key={to}
@@ -216,15 +227,12 @@ function Navigation({
                 >
                   <Icon size={20} aria-hidden="true" />
                   <span className={collapsed ? "sr-only" : ""}>{label}</span>
-                  <ChevronRight
-                    className="nav-arrow"
-                    size={14}
-                    aria-hidden="true"
-                  />
+                  <ChevronRight className="nav-arrow" size={14} aria-hidden="true" />
                 </NavLink>
               ))}
-          </div>
-        ))}
+            </div>
+          </div>;
+        })}
         {items.length === 0 && (
           <p className="sidebar-empty">Nenhuma página encontrada.</p>
         )}
@@ -246,6 +254,14 @@ export function AppShell({
   const [dark, toggleTheme] = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [configurationOpen, setConfigurationOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileDraft, setProfileDraft] = useState({ display_name: "", contact_email: "", contact_phone: "" });
+  const [profileError, setProfileError] = useState("");
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
   const [noticesOpen, setNoticesOpen] = useState(false);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences | null>(null);
@@ -256,6 +272,10 @@ export function AppShell({
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
   const drawer = useRef<HTMLDialogElement>(null);
+  const profileDialog = useRef<HTMLDialogElement>(null);
+  const profileMenu = useRef<HTMLDivElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const location = useLocation();
   useEffect(() => {
     let active = true;
     const load = () => api<Notice[]>("/notifications?limit=30").then((rows) => { if (active) setNotices(rows); }).catch(() => {});
@@ -283,6 +303,39 @@ export function AppShell({
     const timer = window.setInterval(load, 60_000);
     return () => { active = false; window.clearInterval(timer); };
   }, []);
+  useEffect(() => {
+    let active = true;
+    void api<UserProfile>("/me/profile").then((value) => {
+      if (!active) return;
+      setProfile(value);
+      setProfileDraft({ display_name: value.display_name, contact_email: value.contact_email, contact_phone: value.contact_phone });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [account.id]);
+  useEffect(() => {
+    if (location.pathname === "/planejamento" || location.pathname === "/administracao") setConfigurationOpen(true);
+  }, [location.pathname]);
+  useEffect(() => {
+    const element = profileDialog.current;
+    if (!element) return;
+    if (profileOpen && !element.open) element.showModal();
+    if (!profileOpen && element.open) element.close();
+  }, [profileOpen]);
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !profileMenu.current?.contains(event.target)) setProfileMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileMenuOpen]);
   const loadNotices = async () => {
     const rows = await api<Notice[]>("/notifications?limit=30");
     setNotices(rows);
@@ -302,6 +355,76 @@ export function AppShell({
       setNotificationPreferencesSaved(true);
     } catch (error) {
       setNotificationPreferencesError(error instanceof Error ? error.message : "Não foi possível salvar as preferências.");
+    }
+  };
+  const openProfile = () => {
+    setProfileDraft({
+      display_name: profile?.display_name ?? "",
+      contact_email: profile?.contact_email ?? "",
+      contact_phone: profile?.contact_phone ?? "",
+    });
+    setProfileError("");
+    setProfileSaved(false);
+    setProfileOpen(true);
+    setProfileMenuOpen(false);
+  };
+  const openConfiguration = () => {
+    setConfigurationOpen(true);
+    setProfileMenuOpen(false);
+    if (window.matchMedia("(max-width: 1023px)").matches) setMenuOpen(true);
+    else setCollapsed(false);
+  };
+  const saveProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProfileBusy(true);
+    setProfileError("");
+    setProfileSaved(false);
+    try {
+      const saved = await api<UserProfile>("/me/profile", "PUT", profileDraft);
+      setProfile(saved);
+      setProfileDraft({ display_name: saved.display_name, contact_email: saved.contact_email, contact_phone: saved.contact_phone });
+      setProfileSaved(true);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Não foi possível salvar o perfil.");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+  const updateProfilePhoto = async (file: File) => {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setProfileError("Escolha uma imagem JPG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setProfileError("A foto deve ter até 2 MiB.");
+      return;
+    }
+    setProfileBusy(true);
+    setProfileError("");
+    setProfileSaved(false);
+    try {
+      const saved = await uploadImage("/me/profile/photo", file) as UserProfile;
+      setProfile(saved);
+      setProfileDraft({ display_name: saved.display_name, contact_email: saved.contact_email, contact_phone: saved.contact_phone });
+      setProfileSaved(true);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Não foi possível atualizar a foto.");
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+  const removeProfilePhoto = async () => {
+    setProfileBusy(true);
+    setProfileError("");
+    setProfileSaved(false);
+    try {
+      const saved = await api<UserProfile>("/me/profile/photo", "DELETE");
+      setProfile(saved);
+      setProfileSaved(true);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Não foi possível remover a foto.");
+    } finally {
+      setProfileBusy(false);
     }
   };
   const togglePushNotifications = async () => {
@@ -403,35 +526,30 @@ export function AppShell({
             <Bell size={20} aria-hidden="true" />
             {notices.some((notice) => !notice.read) && <span className="notification-count">{notices.filter((notice) => !notice.read).length}</span>}
           </button>
-          <button
-            className="header-icon"
-            onClick={toggleTheme}
-            aria-label={dark ? "Ativar modo claro" : "Ativar modo escuro"}
-          >
-            {dark ? (
-              <Sun size={20} aria-hidden="true" />
-            ) : (
-              <Moon size={20} aria-hidden="true" />
-            )}
+          <button className="header-icon settings-trigger" aria-label="Abrir configurações" aria-expanded={configurationOpen} onClick={openConfiguration}>
+            <Settings2 size={20} aria-hidden="true" />
           </button>
-          <div className="header-account">
-            <span className="avatar">
-              {account.username.slice(0, 2).toUpperCase()}
-            </span>
-            <div>
-              <strong>{account.username}</strong>
-              <small>{roleNames[account.role]}</small>
-            </div>
+          <div className="profile-menu-container" ref={profileMenu}>
+            <button className="header-account-trigger" aria-haspopup="menu" aria-expanded={profileMenuOpen} onClick={() => setProfileMenuOpen((open) => !open)}>
+              {profile?.photo_url ? <img className="avatar-photo" src={profile.photo_url} alt="" /> : <span className="avatar">{(profile?.display_name || account.username).slice(0, 2).toUpperCase()}</span>}
+              <span className="header-account-text">
+                <strong>{profile?.display_name || account.username}</strong>
+                <small>{profile?.contact_email || roleNames[account.role]}</small>
+              </span>
+              <ChevronDown size={16} aria-hidden="true" />
+            </button>
+            {profileMenuOpen && <div className="profile-dropdown" role="menu" aria-label="Menu do perfil">
+              <div className="profile-dropdown-head">
+                {profile?.photo_url ? <img className="avatar-photo" src={profile.photo_url} alt="" /> : <span className="avatar">{(profile?.display_name || account.username).slice(0, 2).toUpperCase()}</span>}
+                <div><strong>{profile?.display_name || account.username}</strong><small>{profile?.contact_email || roleNames[account.role]}</small></div>
+              </div>
+              <button role="menuitem" onClick={openProfile}><UserRound size={18} aria-hidden="true" /> Perfil e contatos</button>
+              <button role="menuitem" onClick={openConfiguration}><Settings2 size={18} aria-hidden="true" /> Opções de configuração</button>
+              <button role="menuitem" onClick={toggleTheme}>{dark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}{dark ? "Tema claro" : "Tema escuro"}</button>
+              <hr />
+              <button role="menuitem" onClick={onLogout} disabled={busy}><LogOut size={18} aria-hidden="true" /> Sair</button>
+            </div>}
           </div>
-          <button
-            className="header-icon logout-button"
-            aria-label="Sair"
-            onClick={onLogout}
-            disabled={busy}
-          >
-            <LogOut size={18} aria-hidden="true" />
-            <span>Sair</span>
-          </button>
         </div>
       </header>
       {noticesOpen && <section className="notification-popover" aria-label="Notificações">
@@ -457,6 +575,35 @@ export function AppShell({
           {(pushConfiguration?.device_count ?? 0) > 0 && <button type="button" disabled={pushBusy} onClick={() => void revokeAllPushNotifications()}>Remover de todos os dispositivos</button>}
         </section>
       </section>}
+      <dialog
+        ref={profileDialog}
+        className="profile-dialog"
+        aria-labelledby="profile-dialog-title"
+        onCancel={(event) => { event.preventDefault(); setProfileOpen(false); }}
+      >
+        <form onSubmit={(event) => void saveProfile(event)}>
+          <header className="profile-dialog-heading">
+            <div><span className="eyebrow">MINHA CONTA</span><h2 id="profile-dialog-title">Perfil e contatos</h2></div>
+            <button type="button" className="header-icon" aria-label="Fechar perfil" onClick={() => setProfileOpen(false)}><X size={20} aria-hidden="true" /></button>
+          </header>
+          <section className="profile-photo-editor" aria-label="Foto de perfil">
+            {profile?.photo_url ? <img className="profile-photo-preview" src={profile.photo_url} alt="Foto de perfil atual" /> : <span className="profile-photo-preview profile-photo-placeholder">{(profile?.display_name || account.username).slice(0, 2).toUpperCase()}</span>}
+            <div><strong>{profile?.display_name || account.username}</strong><small>JPG, PNG ou WebP · até 2 MiB</small><div className="profile-photo-actions">
+              <button type="button" onClick={() => photoInput.current?.click()} disabled={profileBusy}><Camera size={16} aria-hidden="true" /> Nova foto</button>
+              {profile?.photo_url && <button type="button" className="quiet-button" onClick={() => void removeProfilePhoto()} disabled={profileBusy}>Remover foto</button>}
+            </div></div>
+            <input ref={photoInput} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" aria-label="Selecionar foto de perfil" onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void updateProfilePhoto(file); event.currentTarget.value = ""; }} />
+          </section>
+          <div className="profile-fields">
+            <label className="field-label">Nome de exibição<input maxLength={120} autoComplete="name" value={profileDraft.display_name} onChange={(event) => { setProfileDraft({ ...profileDraft, display_name: event.target.value }); setProfileSaved(false); }} placeholder={account.username} /></label>
+            <label className="field-label">E-mail de contato<input type="email" maxLength={254} autoComplete="email" value={profileDraft.contact_email} onChange={(event) => { setProfileDraft({ ...profileDraft, contact_email: event.target.value }); setProfileSaved(false); }} placeholder="nome@empresa.com.br" /></label>
+            <label className="field-label">Telefone / WhatsApp<input type="tel" maxLength={40} autoComplete="tel" value={profileDraft.contact_phone} onChange={(event) => { setProfileDraft({ ...profileDraft, contact_phone: event.target.value }); setProfileSaved(false); }} placeholder="(85) 99999-9999" /></label>
+          </div>
+          {profileError && <p className="rejection" role="alert">{profileError}</p>}
+          {profileSaved && <p className="success-message" role="status">Perfil atualizado.</p>}
+          <footer className="profile-dialog-actions"><button type="button" className="quiet-button" onClick={() => setProfileOpen(false)}>Fechar</button><button type="submit" className="primary" disabled={profileBusy}>{profileBusy ? "Salvando…" : "Salvar perfil"}</button></footer>
+        </form>
+      </dialog>
       <aside className="desktop-sidebar">
         <div className="sidebar-heading">
           <Layers3 size={22} aria-hidden="true" />
@@ -478,7 +625,7 @@ export function AppShell({
             )}
           </button>
         </div>
-        <Navigation account={account} collapsed={collapsed} />
+        <Navigation account={account} collapsed={collapsed} configurationOpen={configurationOpen} toggleConfiguration={() => setConfigurationOpen((open) => !open)} />
         <div className="sidebar-footnote">
           <ShieldCheck size={20} aria-hidden="true" />
           {!collapsed && (
@@ -516,7 +663,7 @@ export function AppShell({
             <X size={22} aria-hidden="true" />
           </button>
         </div>
-        <Navigation account={account} onNavigate={() => setMenuOpen(false)} />
+        <Navigation account={account} configurationOpen={configurationOpen} toggleConfiguration={() => setConfigurationOpen((open) => !open)} onNavigate={() => setMenuOpen(false)} />
       </dialog>
       <div className="content">
         {children}

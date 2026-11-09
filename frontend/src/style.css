@@ -288,21 +288,39 @@ small {
 .official-logo:focus-visible {
   outline-color: hsl(var(--primary-foreground));
 }
-.header-account {
+.header-account-trigger {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 48px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
 }
-.header-account strong {
+.header-account-trigger:hover,
+.header-account-trigger[aria-expanded="true"] {
+  background: hsl(var(--primary-foreground) / 0.12);
+  border-color: hsl(var(--primary-foreground) / 0.22);
+}
+.header-account-text { min-width: 0; text-align: left; }
+.header-account-text strong {
   font-size: 14px;
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
 }
-.header-account small {
+.header-account-text small {
   color: inherit;
   font-size: 12px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  opacity: .82;
 }
 .avatar {
   display: grid;
@@ -314,7 +332,38 @@ small {
   border-radius: 50%;
   font-size: 13px;
   font-weight: 700;
+  flex: 0 0 40px;
 }
+.avatar-photo { display: block; width: 40px; height: 40px; flex: 0 0 40px; border: 1px solid hsl(var(--primary-foreground) / 0.35); border-radius: 50%; object-fit: cover; }
+.profile-menu-container { position: relative; }
+.profile-dropdown { position: absolute; z-index: 320; top: calc(100% + 10px); right: 0; width: min(320px, calc(100vw - 24px)); padding: 8px; color: hsl(var(--foreground)); background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 14px; box-shadow: var(--shadow-lg); }
+.profile-dropdown-head { display: flex; align-items: center; gap: 12px; padding: 12px 10px 16px; border-bottom: 1px solid hsl(var(--border)); margin-bottom: 6px; }
+.profile-dropdown-head > div { min-width: 0; display: grid; gap: 3px; }
+.profile-dropdown-head strong, .profile-dropdown-head small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-dropdown-head small { color: hsl(var(--muted-foreground)); font-size: 12px; }
+.profile-dropdown > button { width: 100%; min-height: 42px; display: flex; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-radius: 8px; background: transparent; color: hsl(var(--foreground)); text-align: left; font-weight: 500; }
+.profile-dropdown > button:hover { background: hsl(var(--muted)); }
+.profile-dropdown hr { border: 0; border-top: 1px solid hsl(var(--border)); margin: 6px 0; }
+.profile-dialog { width: min(560px, calc(100vw - 24px)); max-height: min(90dvh, 760px); padding: 0; border: 1px solid hsl(var(--border)); border-radius: 18px; background: hsl(var(--card)); color: hsl(var(--foreground)); box-shadow: var(--shadow-lg); }
+.profile-dialog::backdrop { background: rgb(11 20 40 / .58); backdrop-filter: blur(3px); }
+.profile-dialog form { display: grid; gap: 20px; padding: 24px; overflow: auto; }
+.profile-dialog-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.profile-dialog-heading h2 { margin: 4px 0 0; }
+.profile-dialog-heading .eyebrow { font-size: 11px; letter-spacing: .12em; font-weight: 800; color: hsl(var(--muted-foreground)); }
+.profile-photo-editor { display: flex; align-items: center; gap: 16px; padding: 16px; border: 1px solid hsl(var(--border)); border-radius: 14px; }
+.profile-photo-preview { width: 76px; height: 76px; flex: 0 0 76px; border-radius: 50%; object-fit: cover; }
+.profile-photo-placeholder { display: grid; place-items: center; background: hsl(var(--primary) / .14); color: hsl(var(--primary)); font-weight: 800; font-size: 20px; }
+.profile-photo-editor > div { display: grid; gap: 5px; min-width: 0; }
+.profile-photo-editor small { color: hsl(var(--muted-foreground)); font-size: 12px; }
+.profile-photo-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; }
+.profile-photo-actions button { min-height: 36px; display: inline-flex; align-items: center; gap: 7px; }
+.profile-fields { display: grid; gap: 14px; }
+.profile-fields .field-label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+.profile-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid hsl(var(--border)); }
+.profile-dialog .success-message { margin: 0; color: #15803d; font-weight: 700; }
+.quiet-button { background: transparent; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.header-account-trigger:focus-visible, .settings-trigger:focus-visible { outline-color: hsl(var(--primary-foreground)); }
 .mobile-menu-trigger {
   display: none;
 }
@@ -403,6 +452,26 @@ nav[aria-label="Menu principal"] {
   margin: 0 12px 8px;
   font-weight: 700;
 }
+.nav-group-toggle {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--sidebar-foreground));
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+.nav-group-toggle:hover,
+.nav-group-toggle[aria-expanded="true"] { background: hsl(var(--sidebar-accent)); }
+.nav-group-chevron { margin-left: auto; transition: transform .18s ease; }
+.nav-group-chevron.open { transform: rotate(180deg); }
+.nav-group [hidden] { display: none; }
 .nav-group a {
   min-height: 48px;
   display: flex;
@@ -1493,7 +1562,7 @@ summary {
   .header-actions {
     gap: 12px;
   }
-  .header-account {
+  .header-account-text {
     display: none;
   }
   .login-form-panel {
@@ -1557,12 +1626,11 @@ summary {
   .header-actions {
     gap: 8px;
   }
-  .logout-button > span {
-    display: none;
-  }
-  .logout-button {
-    font-size: 0;
-  }
+  .header-account-trigger { gap: 6px; padding: 3px; }
+  .header-account-trigger > svg { display: none; }
+  .profile-dropdown { right: -4px; }
+  .profile-dialog form { padding: 20px 16px; }
+  .profile-photo-editor { align-items: flex-start; padding: 12px; }
   .content > main {
     padding: 24px 16px;
   }

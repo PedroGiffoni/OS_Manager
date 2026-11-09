@@ -88,6 +88,7 @@ from .security import (
 )
 from .schemas import (
     Login,
+    UserProfileInput,
     UserInput,
     SupplierInput,
     SupplierCreate,
@@ -378,6 +379,95 @@ def me(request: Request, user=Depends(current_user)):
         "permissions": sorted(effective_permissions(user)),
         "csrf": request.state.session.csrf,
     }
+
+
+def profile_payload(user):
+    return {
+        "username": user.username,
+        "display_name": user.display_name or "",
+        "contact_email": user.contact_email or "",
+        "contact_phone": user.contact_phone or "",
+        "photo_url": f"{PREFIX}/me/profile/photo?v={user.profile_photo_version}"
+        if user.profile_photo
+        else None,
+    }
+
+
+@app.get(PREFIX + "/me/profile")
+def get_my_profile(user=Depends(current_user)):
+    return profile_payload(user)
+
+
+@app.put(PREFIX + "/me/profile")
+def update_my_profile(
+    data: UserProfileInput,
+    user=Depends(current_user),
+    db=Depends(get_db),
+):
+    changed_fields = [
+        name
+        for name, value in (
+            ("display_name", data.display_name),
+            ("contact_email", data.contact_email.lower()),
+            ("contact_phone", data.contact_phone),
+        )
+        if getattr(user, name) != (value or None)
+    ]
+    user.display_name = data.display_name or None
+    user.contact_email = data.contact_email.lower() or None
+    user.contact_phone = data.contact_phone or None
+    if changed_fields:
+        audit(db, user, "user_profile", user.id, "updated", fields=changed_fields)
+        db.commit()
+    return profile_payload(user)
+
+
+@app.get(PREFIX + "/me/profile/photo")
+def get_my_profile_photo(user=Depends(current_user)):
+    if not user.profile_photo or not user.profile_photo_type:
+        fail("Foto de perfil não encontrada.", 404, "NOT_FOUND")
+    return Response(
+        content=user.profile_photo,
+        media_type=user.profile_photo_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
+@app.put(PREFIX + "/me/profile/photo")
+async def update_my_profile_photo(
+    request: Request,
+    user=Depends(current_user),
+    db=Depends(get_db),
+):
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    allowed_types = {
+        "image/jpeg": lambda body: body.startswith(b"\xff\xd8\xff"),
+        "image/png": lambda body: body.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": lambda body: body.startswith(b"RIFF") and body[8:12] == b"WEBP",
+    }
+    body = await request.body()
+    if not body or len(body) > 2 * 1024 * 1024:
+        fail("A foto deve ter até 2 MiB.")
+    validator = allowed_types.get(content_type)
+    if not validator or not validator(body):
+        fail("Envie uma imagem JPG, PNG ou WebP válida.")
+    user.profile_photo = body
+    user.profile_photo_type = content_type
+    user.profile_photo_version = (user.profile_photo_version or 0) + 1
+    audit(db, user, "user_profile", user.id, "photo_updated", media_type=content_type, size=len(body))
+    db.commit()
+    return profile_payload(user)
+
+
+@app.delete(PREFIX + "/me/profile/photo")
+def delete_my_profile_photo(user=Depends(current_user), db=Depends(get_db)):
+    if user.profile_photo:
+        user.profile_photo = None
+        user.profile_photo_type = None
+        user.profile_photo_version = (user.profile_photo_version or 0) + 1
+        audit(db, user, "user_profile", user.id, "photo_removed")
+        db.commit()
+    return profile_payload(user)
 
 
 @app.post(PREFIX + "/auth/logout")

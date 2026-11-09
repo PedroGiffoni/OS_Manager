@@ -29,6 +29,22 @@ class NotificationPreferenceInput(Input):
         return self
 
 
+class UserProfileInput(Input):
+    display_name: str = Field(default="", max_length=120)
+    contact_email: str = Field(default="", max_length=254)
+    contact_phone: str = Field(default="", max_length=40)
+
+    @model_validator(mode="after")
+    def validate_contacts(self):
+        if self.contact_email and not re.fullmatch(
+            r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", self.contact_email
+        ):
+            raise ValueError("Informe um endereço de e-mail válido.")
+        if self.contact_phone and not re.fullmatch(r"[0-9+().\-\s]{1,40}", self.contact_phone):
+            raise ValueError("Informe um telefone válido.")
+        return self
+
+
 class PushSubscriptionKeys(Input):
     p256dh: str = Field(min_length=40, max_length=180)
     auth: str = Field(min_length=16, max_length=100)
